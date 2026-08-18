@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>팀 업무 배분 매트릭스</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const STORAGE_KEY = "work-matrix-data-v1";
+
+const INITIAL_MEMBERS = ["김철수", "이영희", "박민수"];
+const INITIAL_PROJECTS = ["자율주행 모빌리티 엑스포", "커넥티드 카 서비스 기획", "팀 공통(총무)"];
+
+const INITIAL_TASKS = [
+  {
+    id: "t1",
+    title: "부스 기획 및 운영안 작성",
+    project: "자율주행 모빌리티 엑스포",
+    assignee: "김철수",
+    startDate: "2026-08-01",
+    endDate: "2026-08-14",
+  },
+  {
+    id: "t2",
+    title: "텔레매틱스 기반 고객 데이터 분석",
+    project: "커넥티드 카 서비스 기획",
+    assignee: "이영희",
+    startDate: "2026-08-20",
+    endDate: "2026-09-10",
+  },
+  {
+    id: "t3",
+    title: "월간 법인카드 사용 내역 정산",
+    project: "팀 공통(총무)",
+    assignee: "박민수",
+    startDate: "2026-08-25",
+    endDate: "2026-08-31",
+  },
+];
+
+function loadInitialState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.tasks) && Array.isArray(parsed.members) && Array.isArray(parsed.projects)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn("저장된 데이터를 불러오지 못했습니다.", e);
+  }
+  return { members: INITIAL_MEMBERS, projects: INITIAL_PROJECTS, tasks: INITIAL_TASKS };
+}
+
+function formatDateRange(start, end) {
+  return `${start} ~ ${end}`;
+}
+
+function TaskModal({ members, projects, onClose, onSave }) {
+  const [title, setTitle] = useState("");
+  const [project, setProject] = useState(projects[0] || "");
+  const [assignee, setAssignee] = useState(members[0] || "");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim() || !project || !assignee || !startDate || !endDate) {
+      setError("모든 항목을 입력해 주세요.");
+      return;
+    }
+    if (startDate > endDate) {
+      setError("시작일은 마감일보다 이전이어야 합니다.");
+      return;
+    }
+    onSave({
+      id: `t${Date.now()}`,
+      title: title.trim(),
+      project,
+      assignee,
+      startDate,
+      endDate,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-800">새 업무 추가</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+            aria-label="닫기"
+          >
+            &times;
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1">업무명</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder="예: 주간 보고서 작성"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1">과제명</label>
+            <select
+              value={project}
+              onChange={(e) => setProject(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              {projects.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1">담당자</label>
+            <select
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              {members.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">시작일</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">마감일</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+          </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              저장
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TaskCard({ task, onDragStart }) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, task.id)}
+      className="bg-white rounded-lg shadow-sm border border-slate-200 px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
+    >
+      <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
+      <p className="text-xs text-slate-400 mt-1">{formatDateRange(task.startDate, task.endDate)}</p>
+    </div>
+  );
+}
+
+function MatrixCell({ project, member, tasks, onDragStart, onDrop }) {
+  const [isOver, setIsOver] = useState(false);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (!isOver) setIsOver(true);
+  };
+
+  const handleDragLeave = () => setIsOver(false);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsOver(false);
+    const taskId = e.dataTransfer.getData("text/plain");
+    onDrop(taskId, project, member);
+  };
+
+  return (
+    <td
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`align-top border border-slate-200 p-2 min-w-[200px] w-[220px] transition-colors ${
+        isOver ? "bg-indigo-50" : "bg-white"
+      }`}
+    >
+      <div className="min-h-[64px]">
+        {tasks.map((task) => (
+          <TaskCard key={task.id} task={task} onDragStart={onDragStart} />
+        ))}
+      </div>
+    </td>
+  );
+}
+
+function App() {
+  const initial = useRef(loadInitialState());
+  const [members] = useState(initial.current.members);
+  const [projects] = useState(initial.current.projects);
+  const [tasks, setTasks] = useState(initial.current.tasks);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
+  }, [members, projects, tasks]);
+
+  const handleDragStart = (e, taskId) => {
+    e.dataTransfer.setData("text/plain", taskId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDrop = (taskId, project, member) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, project, assignee: member } : t
+      )
+    );
+  };
+
+  const handleSaveTask = (newTask) => {
+    setTasks((prev) => [...prev, newTask]);
+    setIsModalOpen(false);
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">팀 업무 배분 매트릭스</h1>
+          <p className="text-sm text-slate-500 mt-1">팀원별 · 과제별 업무를 한눈에 확인하고 드래그로 재배치하세요.</p>
+        </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm"
+        >
+          + 새 업무 추가
+        </button>
+      </div>
+
+      <div className="overflow-x-auto bg-white rounded-xl shadow-sm border border-slate-200">
+        <table className="border-collapse w-full">
+          <thead>
+            <tr>
+              <th className="border border-slate-200 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-600 min-w-[200px] sticky left-0 z-10">
+                과제 \ 담당자
+              </th>
+              {members.map((member) => (
+                <th
+                  key={member}
+                  className="border border-slate-200 bg-slate-50 p-3 text-center text-sm font-semibold text-slate-600 min-w-[220px]"
+                >
+                  {member}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {projects.map((project) => (
+              <tr key={project}>
+                <th className="border border-slate-200 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-600 align-top sticky left-0 z-10">
+                  {project}
+                </th>
+                {members.map((member) => {
+                  const cellTasks = tasks.filter(
+                    (t) => t.project === project && t.assignee === member
+                  );
+                  return (
+                    <MatrixCell
+                      key={`${project}-${member}`}
+                      project={project}
+                      member={member}
+                      tasks={cellTasks}
+                      onDragStart={handleDragStart}
+                      onDrop={handleDrop}
+                    />
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {isModalOpen && (
+        <TaskModal
+          members={members}
+          projects={projects}
+          onClose={() => setIsModalOpen(false)}
+          onSave={handleSaveTask}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
