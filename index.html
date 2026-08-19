@@ -35,6 +35,16 @@ function statusMeta(status) {
   return STATUS_META[status] || STATUS_META.pending;
 }
 
+function getTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const TODAY = getTodayStr();
+
+function isOverdue(task) {
+  return task.status !== "done" && task.endDate < TODAY;
+}
+
 const INITIAL_MEMBERS = [
   { id: "m1", name: "김철수" },
   { id: "m2", name: "이영희" },
@@ -250,18 +260,22 @@ function TaskFormModal({ members, projects, task, onClose, onSave, onDelete }) {
 
 function TaskCard({ task, onDragStart, onEdit }) {
   const meta = statusMeta(task.status);
+  const overdue = isOverdue(task);
+  const borderClass = overdue ? "border-l-red-500" : meta.borderClass;
+  const badgeClass = overdue ? "bg-red-50 text-red-600" : meta.badgeClass;
+  const dateClass = overdue ? "text-red-500 font-medium" : "text-slate-400";
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
       onDoubleClick={() => onEdit(task)}
       title="더블클릭하여 수정"
-      className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${meta.borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow`}
+      className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow`}
     >
       <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
       <div className="flex items-center justify-between mt-1.5 gap-2">
-        <p className="text-xs text-slate-400">{formatDateRange(task.startDate, task.endDate)}</p>
-        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${meta.badgeClass}`}>
+        <p className={`text-xs ${dateClass}`}>{formatDateRange(task.startDate, task.endDate)}</p>
+        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badgeClass}`}>
           {meta.label}
         </span>
       </div>
@@ -527,6 +541,7 @@ function App() {
               {opt.label}
             </span>
           ))}
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">지연</span>
         </div>
       </div>
 
