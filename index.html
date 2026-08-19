@@ -15,9 +15,25 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-const STORAGE_KEY = "work-matrix-data-v3";
+const STORAGE_KEY = "work-matrix-data-v4";
 const UNASSIGNED = "";
 const EDIT_PASSWORD = "1234"; // 배포 전 반드시 변경하세요
+
+const STATUS_OPTIONS = [
+  { value: "pending", label: "대기" },
+  { value: "in_progress", label: "진행중" },
+  { value: "done", label: "완료" },
+];
+
+const STATUS_META = {
+  pending: { label: "대기", badgeClass: "bg-slate-100 text-slate-500", borderClass: "border-l-slate-300" },
+  in_progress: { label: "진행중", badgeClass: "bg-amber-50 text-amber-600", borderClass: "border-l-amber-400" },
+  done: { label: "완료", badgeClass: "bg-emerald-50 text-emerald-600", borderClass: "border-l-emerald-400" },
+};
+
+function statusMeta(status) {
+  return STATUS_META[status] || STATUS_META.pending;
+}
 
 const INITIAL_MEMBERS = [
   { id: "m1", name: "김철수" },
@@ -39,6 +55,7 @@ const INITIAL_TASKS = [
     assignee: "m1",
     startDate: "2026-08-01",
     endDate: "2026-08-14",
+    status: "done",
   },
   {
     id: "t2",
@@ -47,6 +64,7 @@ const INITIAL_TASKS = [
     assignee: "m2",
     startDate: "2026-08-20",
     endDate: "2026-09-10",
+    status: "pending",
   },
   {
     id: "t3",
@@ -55,6 +73,7 @@ const INITIAL_TASKS = [
     assignee: "m3",
     startDate: "2026-08-25",
     endDate: "2026-08-31",
+    status: "pending",
   },
 ];
 
@@ -77,12 +96,14 @@ function formatDateRange(start, end) {
   return `${start} ~ ${end}`;
 }
 
-function TaskModal({ members, projects, onClose, onSave }) {
-  const [title, setTitle] = useState("");
-  const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [assignee, setAssignee] = useState(members[0]?.id || UNASSIGNED);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+function TaskFormModal({ members, projects, task, onClose, onSave, onDelete }) {
+  const isEditing = Boolean(task);
+  const [title, setTitle] = useState(task?.title || "");
+  const [projectId, setProjectId] = useState(task?.projectId || projects[0]?.id || "");
+  const [assignee, setAssignee] = useState(task ? task.assignee : (members[0]?.id || UNASSIGNED));
+  const [startDate, setStartDate] = useState(task?.startDate || "");
+  const [endDate, setEndDate] = useState(task?.endDate || "");
+  const [status, setStatus] = useState(task?.status || "pending");
   const [error, setError] = useState("");
 
   const handleSubmit = (e) => {
@@ -96,12 +117,13 @@ function TaskModal({ members, projects, onClose, onSave }) {
       return;
     }
     onSave({
-      id: `t${Date.now()}`,
+      id: task?.id || `t${Date.now()}`,
       title: title.trim(),
       projectId,
       assignee,
       startDate,
       endDate,
+      status,
     });
   };
 
@@ -109,7 +131,7 @@ function TaskModal({ members, projects, onClose, onSave }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-800">새 업무 추가</h2>
+          <h2 className="text-lg font-semibold text-slate-800">{isEditing ? "업무 수정" : "새 업무 추가"}</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 text-xl leading-none"
@@ -154,6 +176,25 @@ function TaskModal({ members, projects, onClose, onSave }) {
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1">상태</label>
+            <div className="flex gap-2">
+              {STATUS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setStatus(opt.value)}
+                  className={`flex-1 text-sm font-medium px-3 py-2 rounded-lg border transition-colors ${
+                    status === opt.value
+                      ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                      : "border-slate-300 text-slate-500 hover:bg-slate-50"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">시작일</label>
@@ -175,20 +216,31 @@ function TaskModal({ members, projects, onClose, onSave }) {
             </div>
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
-            >
-              저장
-            </button>
+          <div className="flex items-center justify-between gap-2 pt-2">
+            {isEditing ? (
+              <button
+                type="button"
+                onClick={() => onDelete(task.id)}
+                className="px-3 py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+              >
+                삭제
+              </button>
+            ) : <span />}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+              >
+                저장
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -196,20 +248,28 @@ function TaskModal({ members, projects, onClose, onSave }) {
   );
 }
 
-function TaskCard({ task, onDragStart }) {
+function TaskCard({ task, onDragStart, onEdit }) {
+  const meta = statusMeta(task.status);
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
-      className="bg-white rounded-lg shadow-sm border border-slate-200 px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
+      onDoubleClick={() => onEdit(task)}
+      title="더블클릭하여 수정"
+      className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${meta.borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow`}
     >
       <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
-      <p className="text-xs text-slate-400 mt-1">{formatDateRange(task.startDate, task.endDate)}</p>
+      <div className="flex items-center justify-between mt-1.5 gap-2">
+        <p className="text-xs text-slate-400">{formatDateRange(task.startDate, task.endDate)}</p>
+        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${meta.badgeClass}`}>
+          {meta.label}
+        </span>
+      </div>
     </div>
   );
 }
 
-function MatrixCell({ projectId, member, tasks, onDragStart, onDrop }) {
+function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask }) {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragOver = (e) => {
@@ -237,7 +297,7 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop }) {
     >
       <div className="min-h-[64px]">
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onDragStart={onDragStart} />
+          <TaskCard key={task.id} task={task} onDragStart={onDragStart} onEdit={onEditTask} />
         ))}
       </div>
     </td>
@@ -250,9 +310,12 @@ function App() {
   const [projects, setProjects] = useState(initial.current.projects);
   const [tasks, setTasks] = useState(initial.current.tasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
   const [newMemberName, setNewMemberName] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
   const [isEditUnlocked, setIsEditUnlocked] = useState(false);
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [memberFilter, setMemberFilter] = useState("all");
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
@@ -271,9 +334,33 @@ function App() {
     );
   };
 
-  const handleSaveTask = (newTask) => {
-    setTasks((prev) => [...prev, newTask]);
+  const handleOpenCreateModal = () => {
+    setEditingTask(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (task) => {
+    setEditingTask(task);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveTask = (taskData) => {
+    setTasks((prev) => {
+      const exists = prev.some((t) => t.id === taskData.id);
+      return exists ? prev.map((t) => (t.id === taskData.id ? taskData : t)) : [...prev, taskData];
+    });
     setIsModalOpen(false);
+    setEditingTask(null);
+  };
+
+  const handleDeleteTask = (taskId) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const confirmed = window.confirm(`'${task.title}' 업무를 삭제하시겠습니까?`);
+    if (!confirmed) return;
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setIsModalOpen(false);
+    setEditingTask(null);
   };
 
   const handleToggleEditLock = () => {
@@ -319,6 +406,7 @@ function App() {
     setTasks((prev) =>
       prev.map((t) => (t.assignee === memberId ? { ...t, assignee: UNASSIGNED } : t))
     );
+    if (memberFilter === memberId) setMemberFilter("all");
   };
 
   const handleAddProject = (e) => {
@@ -346,6 +434,7 @@ function App() {
     if (!confirmed) return;
     setProjects((prev) => prev.filter((p) => p.id !== projectId));
     setTasks((prev) => prev.filter((t) => t.projectId !== projectId));
+    if (projectFilter === projectId) setProjectFilter("all");
   };
 
   const handleMoveProject = (index, direction) => {
@@ -358,7 +447,15 @@ function App() {
     });
   };
 
-  const totalColumns = members.length + 3;
+  const visibleProjects = projectFilter === "all" ? projects : projects.filter((p) => p.id === projectFilter);
+  const visibleMembers = memberFilter === "all"
+    ? members
+    : memberFilter === UNASSIGNED
+      ? []
+      : members.filter((m) => m.id === memberFilter);
+  const showUnassignedColumn = memberFilter === "all" || memberFilter === UNASSIGNED;
+  const isFiltered = projectFilter !== "all" || memberFilter !== "all";
+  const totalColumns = 1 + visibleMembers.length + (showUnassignedColumn ? 1 : 0) + 1;
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -379,11 +476,57 @@ function App() {
             {isEditUnlocked ? "🔓 담당자/과제 편집 잠금" : "🔒 담당자/과제 편집 잠금 해제"}
           </button>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenCreateModal}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm"
           >
             + 새 업무 추가
           </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-slate-500">과제</label>
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          >
+            <option value="all">전체 과제</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-slate-500">담당자</label>
+          <select
+            value={memberFilter}
+            onChange={(e) => setMemberFilter(e.target.value)}
+            className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          >
+            <option value="all">전체 담당자</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+            <option value={UNASSIGNED}>담당자 미지정</option>
+          </select>
+        </div>
+        {isFiltered && (
+          <button
+            onClick={() => { setProjectFilter("all"); setMemberFilter("all"); }}
+            className="text-xs text-indigo-600 hover:underline"
+          >
+            필터 초기화
+          </button>
+        )}
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-xs text-slate-400 mr-1">상태</span>
+          {STATUS_OPTIONS.map((opt) => (
+            <span key={opt.value} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${STATUS_META[opt.value].badgeClass}`}>
+              {opt.label}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -394,7 +537,7 @@ function App() {
               <th className="border border-slate-200 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-600 min-w-[200px] sticky left-0 z-10">
                 과제 \ 담당자
               </th>
-              {members.map((member) => (
+              {visibleMembers.map((member) => (
                 <th
                   key={member.id}
                   className="border border-slate-200 bg-slate-50 p-3 text-center text-sm font-semibold text-slate-600 min-w-[220px]"
@@ -421,9 +564,11 @@ function App() {
                   )}
                 </th>
               ))}
-              <th className="border border-slate-200 bg-slate-100 p-3 text-center text-sm font-semibold text-slate-500 italic min-w-[220px]">
-                담당자 미지정
-              </th>
+              {showUnassignedColumn && (
+                <th className="border border-slate-200 bg-slate-100 p-3 text-center text-sm font-semibold text-slate-500 italic min-w-[220px]">
+                  담당자 미지정
+                </th>
+              )}
               <th className="border border-slate-200 bg-slate-50 p-3 text-center min-w-[160px]">
                 {isEditUnlocked ? (
                   <form onSubmit={handleAddMember} className="flex items-center justify-center gap-1">
@@ -448,7 +593,8 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {projects.map((project, index) => {
+            {visibleProjects.map((project, index) => {
+              const projectIndex = projects.findIndex((p) => p.id === project.id);
               const unassignedTasks = tasks.filter(
                 (t) =>
                   t.projectId === project.id &&
@@ -461,8 +607,8 @@ function App() {
                       <div className="flex items-start gap-1">
                         <div className="flex flex-col shrink-0 mt-0.5">
                           <button
-                            onClick={() => handleMoveProject(index, -1)}
-                            disabled={index === 0}
+                            onClick={() => handleMoveProject(projectIndex, -1)}
+                            disabled={projectIndex === 0}
                             className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
                             title="위로 이동"
                             aria-label="위로 이동"
@@ -470,8 +616,8 @@ function App() {
                             ▲
                           </button>
                           <button
-                            onClick={() => handleMoveProject(index, 1)}
-                            disabled={index === projects.length - 1}
+                            onClick={() => handleMoveProject(projectIndex, 1)}
+                            disabled={projectIndex === projects.length - 1}
                             className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
                             title="아래로 이동"
                             aria-label="아래로 이동"
@@ -498,7 +644,7 @@ function App() {
                       <span className="px-1 py-0.5">{project.name}</span>
                     )}
                   </th>
-                  {members.map((member) => {
+                  {visibleMembers.map((member) => {
                     const cellTasks = tasks.filter(
                       (t) => t.projectId === project.id && t.assignee === member.id
                     );
@@ -510,17 +656,21 @@ function App() {
                         tasks={cellTasks}
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
+                        onEditTask={handleOpenEditModal}
                       />
                     );
                   })}
-                  <MatrixCell
-                    key={`${project.id}-unassigned`}
-                    projectId={project.id}
-                    member={UNASSIGNED}
-                    tasks={unassignedTasks}
-                    onDragStart={handleDragStart}
-                    onDrop={handleDrop}
-                  />
+                  {showUnassignedColumn && (
+                    <MatrixCell
+                      key={`${project.id}-unassigned`}
+                      projectId={project.id}
+                      member={UNASSIGNED}
+                      tasks={unassignedTasks}
+                      onDragStart={handleDragStart}
+                      onDrop={handleDrop}
+                      onEditTask={handleOpenEditModal}
+                    />
+                  )}
                   <td className="border border-slate-200 bg-slate-50"></td>
                 </tr>
               );
@@ -553,11 +703,13 @@ function App() {
       </div>
 
       {isModalOpen && (
-        <TaskModal
+        <TaskFormModal
           members={members}
           projects={projects}
-          onClose={() => setIsModalOpen(false)}
+          task={editingTask}
+          onClose={() => { setIsModalOpen(false); setEditingTask(null); }}
           onSave={handleSaveTask}
+          onDelete={handleDeleteTask}
         />
       )}
     </div>
