@@ -179,7 +179,7 @@ async function pickSaveFile(suggestedName, startInHandle) {
 }
 
 function TaskFormModal({ members, projects, task, onClose, onSave, onDelete }) {
-  const isEditing = Boolean(task);
+  const isEditing = Boolean(task?.id);
   const [title, setTitle] = useState(task?.title || "");
   const [projectId, setProjectId] = useState(task?.projectId || projects[0]?.id || "");
   const [assignee, setAssignee] = useState(task ? task.assignee : (members[0]?.id || UNASSIGNED));
@@ -340,7 +340,7 @@ function TaskCard({ task, onDragStart, onEdit }) {
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
-      onDoubleClick={() => onEdit(task)}
+      onDoubleClick={(e) => { e.stopPropagation(); onEdit(task); }}
       title="더블클릭하여 수정"
       className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow`}
     >
@@ -355,7 +355,7 @@ function TaskCard({ task, onDragStart, onEdit }) {
   );
 }
 
-function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask }) {
+function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask, onCreateTask, isRowHighlighted, isColHighlighted, onHoverCell, onHoverEnd }) {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragOver = (e) => {
@@ -372,14 +372,21 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask 
     onDrop(taskId, projectId, member);
   };
 
+  let bgClass = "bg-white";
+  if (isRowHighlighted && isColHighlighted) bgClass = "bg-slate-100";
+  else if (isRowHighlighted || isColHighlighted) bgClass = "bg-slate-50";
+  if (isOver) bgClass = "bg-indigo-50";
+
   return (
     <td
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`align-top border border-slate-200 p-2 min-w-[200px] w-[220px] transition-colors ${
-        isOver ? "bg-indigo-50" : "bg-white"
-      }`}
+      onDoubleClick={() => onCreateTask(projectId, member)}
+      onMouseEnter={() => onHoverCell(projectId, member)}
+      onMouseLeave={onHoverEnd}
+      title="더블클릭하여 새 업무 추가"
+      className={`align-top border border-slate-200 p-2 min-w-[200px] w-[220px] transition-colors ${bgClass}`}
     >
       <div className="min-h-[64px]">
         {tasks.map((task) => (
@@ -390,7 +397,7 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask 
   );
 }
 
-function ProjectRowHeader({ project, isEditUnlocked, draggingProjectId, onRename, onDelete, onReorder, onDragStart: onDragStartRow, onDragEnd: onDragEndRow }) {
+function ProjectRowHeader({ project, isEditUnlocked, draggingProjectId, isHighlighted, onRename, onDelete, onReorder, onDragStart: onDragStartRow, onDragEnd: onDragEndRow }) {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragStart = (e) => {
@@ -429,7 +436,7 @@ function ProjectRowHeader({ project, isEditUnlocked, draggingProjectId, onRename
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`border border-slate-200 p-2 text-left text-sm font-semibold text-slate-600 align-top sticky left-0 z-10 transition-colors ${
-        isOver ? "bg-indigo-50" : "bg-slate-50"
+        isOver ? "bg-indigo-50" : isHighlighted ? "bg-slate-100" : "bg-slate-50"
       }`}
     >
       <div className="flex items-start gap-1">
@@ -482,6 +489,8 @@ function App() {
   const [memberFilter, setMemberFilter] = useState("all");
   const [statusFilters, setStatusFilters] = useState(DEFAULT_STATUS_FILTERS);
   const [draggingProjectId, setDraggingProjectId] = useState(null);
+  const [hoveredProjectId, setHoveredProjectId] = useState(null);
+  const [hoveredMemberKey, setHoveredMemberKey] = useState(null);
   const importInputRef = useRef(null);
   const fileHandleRef = useRef(null);
 
@@ -646,6 +655,21 @@ function App() {
   const handleOpenEditModal = (task) => {
     setEditingTask(task);
     setIsModalOpen(true);
+  };
+
+  const handleOpenCreateModalForCell = (projectId, member) => {
+    setEditingTask({ projectId, assignee: member });
+    setIsModalOpen(true);
+  };
+
+  const handleHoverCell = (projectId, member) => {
+    setHoveredProjectId(projectId);
+    setHoveredMemberKey(member);
+  };
+
+  const handleHoverEnd = () => {
+    setHoveredProjectId(null);
+    setHoveredMemberKey(null);
   };
 
   const handleSaveTask = (taskData) => {
@@ -905,7 +929,9 @@ function App() {
               {visibleMembers.map((member) => (
                 <th
                   key={member.id}
-                  className="border border-slate-200 bg-slate-50 p-3 text-center text-sm font-semibold text-slate-600 min-w-[220px]"
+                  className={`border border-slate-200 p-3 text-center text-sm font-semibold text-slate-600 min-w-[220px] transition-colors ${
+                    hoveredMemberKey === member.id ? "bg-slate-100" : "bg-slate-50"
+                  }`}
                 >
                   {isEditUnlocked ? (
                     <div className="flex items-center justify-center gap-2">
@@ -930,7 +956,9 @@ function App() {
                 </th>
               ))}
               {showUnassignedColumn && (
-                <th className="border border-slate-200 bg-slate-100 p-3 text-center text-sm font-semibold text-slate-500 italic min-w-[220px]">
+                <th className={`border border-slate-200 p-3 text-center text-sm font-semibold text-slate-500 italic min-w-[220px] transition-colors ${
+                  hoveredMemberKey === UNASSIGNED ? "bg-slate-200" : "bg-slate-100"
+                }`}>
                   담당자 미지정
                 </th>
               )}
@@ -971,6 +999,7 @@ function App() {
                     project={project}
                     isEditUnlocked={isEditUnlocked}
                     draggingProjectId={draggingProjectId}
+                    isHighlighted={hoveredProjectId === project.id}
                     onRename={handleRenameProject}
                     onDelete={handleDeleteProject}
                     onReorder={handleReorderProjects}
@@ -990,6 +1019,11 @@ function App() {
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
                         onEditTask={handleOpenEditModal}
+                        onCreateTask={handleOpenCreateModalForCell}
+                        isRowHighlighted={hoveredProjectId === project.id}
+                        isColHighlighted={hoveredMemberKey === member.id}
+                        onHoverCell={handleHoverCell}
+                        onHoverEnd={handleHoverEnd}
                       />
                     );
                   })}
@@ -1002,6 +1036,11 @@ function App() {
                       onDragStart={handleDragStart}
                       onDrop={handleDrop}
                       onEditTask={handleOpenEditModal}
+                      onCreateTask={handleOpenCreateModalForCell}
+                      isRowHighlighted={hoveredProjectId === project.id}
+                      isColHighlighted={hoveredMemberKey === UNASSIGNED}
+                      onHoverCell={handleHoverCell}
+                      onHoverEnd={handleHoverEnd}
                     />
                   )}
                   <td className="border border-slate-200 bg-slate-50"></td>
