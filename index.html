@@ -322,18 +322,29 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask 
   );
 }
 
-function ProjectRowHeader({ project, isEditUnlocked, onRename, onDelete, onReorder }) {
+function ProjectRowHeader({ project, isEditUnlocked, draggingProjectId, onRename, onDelete, onReorder, onDragStart: onDragStartRow, onDragEnd: onDragEndRow }) {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragStart = (e) => {
     e.dataTransfer.setData("application/x-project-id", project.id);
     e.dataTransfer.effectAllowed = "move";
+    const row = e.currentTarget.closest("tr");
+    if (row) {
+      const rect = row.getBoundingClientRect();
+      e.dataTransfer.setDragImage(row, e.clientX - rect.left, e.clientY - rect.top);
+    }
+    onDragStartRow(project.id);
   };
 
   const handleDragOver = (e) => {
     if (!e.dataTransfer.types.includes("application/x-project-id")) return;
     e.preventDefault();
     if (!isOver) setIsOver(true);
+    // 드래그 중인 항목이 이 행 위로 오면 즉시 순서를 바꿔, 다른 행들이
+    // 자리를 비켜주며 드래그하는 행을 따라가는 것처럼 보이게 한다.
+    if (draggingProjectId && draggingProjectId !== project.id) {
+      onReorder(draggingProjectId, project.id);
+    }
   };
 
   const handleDragLeave = () => setIsOver(false);
@@ -342,8 +353,6 @@ function ProjectRowHeader({ project, isEditUnlocked, onRename, onDelete, onReord
     if (!e.dataTransfer.types.includes("application/x-project-id")) return;
     e.preventDefault();
     setIsOver(false);
-    const draggedId = e.dataTransfer.getData("application/x-project-id");
-    if (draggedId) onReorder(draggedId, project.id);
   };
 
   return (
@@ -359,6 +368,7 @@ function ProjectRowHeader({ project, isEditUnlocked, onRename, onDelete, onReord
         <span
           draggable
           onDragStart={handleDragStart}
+          onDragEnd={onDragEndRow}
           className="shrink-0 mt-0.5 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing select-none text-xs leading-none"
           title="드래그하여 순서 변경"
           aria-label="드래그하여 순서 변경"
@@ -403,6 +413,7 @@ function App() {
   const [projectFilter, setProjectFilter] = useState("all");
   const [memberFilter, setMemberFilter] = useState("all");
   const [statusFilters, setStatusFilters] = useState(DEFAULT_STATUS_FILTERS);
+  const [draggingProjectId, setDraggingProjectId] = useState(null);
   const importInputRef = useRef(null);
   const fileHandleRef = useRef(null);
 
@@ -886,13 +897,16 @@ function App() {
                   matchesStatusFilter(t)
               );
               return (
-                <tr key={project.id}>
+                <tr key={project.id} className={`transition-opacity ${draggingProjectId === project.id ? "opacity-40" : ""}`}>
                   <ProjectRowHeader
                     project={project}
                     isEditUnlocked={isEditUnlocked}
+                    draggingProjectId={draggingProjectId}
                     onRename={handleRenameProject}
                     onDelete={handleDeleteProject}
                     onReorder={handleReorderProjects}
+                    onDragStart={setDraggingProjectId}
+                    onDragEnd={() => setDraggingProjectId(null)}
                   />
                   {visibleMembers.map((member) => {
                     const cellTasks = tasks.filter(
