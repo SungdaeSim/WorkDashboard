@@ -50,14 +50,53 @@ function isOverdue(task) {
 
 const EMPTY_STATE = { members: [], projects: [], tasks: [], loadedFileName: null };
 
+// 필드가 없거나 알 수 없는 형식이어도 에러 없이 빈 값으로 채워, 스키마가
+// 바뀌어도(과거/미래 버전 파일 모두) 항상 불러올 수 있도록 한다.
+function normalizeData(parsed) {
+  const obj = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  const members = Array.isArray(obj.members) ? obj.members : [];
+  const projects = Array.isArray(obj.projects) ? obj.projects : [];
+  const tasks = Array.isArray(obj.tasks) ? obj.tasks : [];
+
+  const normalizedMembers = members
+    .filter((m) => m && typeof m === "object")
+    .map((m, i) => ({
+      id: m.id || `m${Date.now()}_${i}`,
+      name: m.name || "",
+    }));
+
+  const normalizedProjects = projects
+    .filter((p) => p && typeof p === "object")
+    .map((p, i) => ({
+      id: p.id || `p${Date.now()}_${i}`,
+      name: p.name || "",
+    }));
+
+  const normalizedTasks = tasks
+    .filter((t) => t && typeof t === "object")
+    .map((t, i) => ({
+      id: t.id || `t${Date.now()}_${i}`,
+      title: t.title || "",
+      projectId: t.projectId || "",
+      assignee: t.assignee || UNASSIGNED,
+      startDate: t.startDate || "",
+      endDate: t.endDate || "",
+      status: t.status || "pending",
+    }));
+
+  return {
+    members: normalizedMembers,
+    projects: normalizedProjects,
+    tasks: normalizedTasks,
+    loadedFileName: typeof obj.loadedFileName === "string" ? obj.loadedFileName : null,
+  };
+}
+
 function loadInitialState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.tasks) && Array.isArray(parsed.members) && Array.isArray(parsed.projects)) {
-        return { ...EMPTY_STATE, ...parsed };
-      }
+      return { ...EMPTY_STATE, ...normalizeData(JSON.parse(raw)) };
     }
   } catch (e) {
     console.warn("저장된 데이터를 불러오지 못했습니다.", e);
@@ -413,17 +452,14 @@ function App() {
         alert("올바른 JSON 파일이 아닙니다.");
         return;
       }
-      if (!parsed || !Array.isArray(parsed.members) || !Array.isArray(parsed.projects) || !Array.isArray(parsed.tasks)) {
-        alert("이 앱에서 저장한 파일이 아닙니다.");
-        return;
-      }
+      const normalized = normalizeData(parsed);
       const confirmed = window.confirm(
         `'${file.name}' 파일 내용으로 현재 데이터를 덮어씁니다.\n계속하시겠습니까?`
       );
       if (!confirmed) return;
-      setMembers(parsed.members);
-      setProjects(parsed.projects);
-      setTasks(parsed.tasks);
+      setMembers(normalized.members);
+      setProjects(normalized.projects);
+      setTasks(normalized.tasks);
       setLoadedFileName(file.name);
     };
     reader.readAsText(file);
