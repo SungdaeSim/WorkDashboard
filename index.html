@@ -318,6 +318,72 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask 
   );
 }
 
+function ProjectRowHeader({ project, isEditUnlocked, onRename, onDelete, onReorder }) {
+  const [isOver, setIsOver] = useState(false);
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData("application/x-project-id", project.id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e) => {
+    if (!e.dataTransfer.types.includes("application/x-project-id")) return;
+    e.preventDefault();
+    if (!isOver) setIsOver(true);
+  };
+
+  const handleDragLeave = () => setIsOver(false);
+
+  const handleDrop = (e) => {
+    if (!e.dataTransfer.types.includes("application/x-project-id")) return;
+    e.preventDefault();
+    setIsOver(false);
+    const draggedId = e.dataTransfer.getData("application/x-project-id");
+    if (draggedId) onReorder(draggedId, project.id);
+  };
+
+  return (
+    <th
+      onDragOver={isEditUnlocked ? handleDragOver : undefined}
+      onDragLeave={isEditUnlocked ? handleDragLeave : undefined}
+      onDrop={isEditUnlocked ? handleDrop : undefined}
+      className={`border border-slate-200 p-2 text-left text-sm font-semibold text-slate-600 align-top sticky left-0 z-10 transition-colors ${
+        isOver ? "bg-indigo-50" : "bg-slate-50"
+      }`}
+    >
+      {isEditUnlocked ? (
+        <div className="flex items-start gap-1">
+          <span
+            draggable
+            onDragStart={handleDragStart}
+            className="shrink-0 mt-0.5 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing select-none text-xs leading-none"
+            title="드래그하여 순서 변경"
+            aria-label="드래그하여 순서 변경"
+          >
+            ⠿
+          </span>
+          <input
+            type="text"
+            value={project.name}
+            onChange={(e) => onRename(project.id, e.target.value)}
+            className="w-full bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-400 focus:bg-white rounded px-1 py-0.5 text-sm font-semibold text-slate-600 focus:outline-none"
+          />
+          <button
+            onClick={() => onDelete(project.id)}
+            className="shrink-0 mt-0.5 text-slate-300 hover:text-red-500 text-xs leading-none"
+            title={`${project.name} 삭제`}
+            aria-label={`${project.name} 삭제`}
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <span className="px-1 py-0.5">{project.name}</span>
+      )}
+    </th>
+  );
+}
+
 function App() {
   const initial = useRef(loadInitialState());
   const [members, setMembers] = useState(initial.current.members);
@@ -330,7 +396,7 @@ function App() {
   const [isEditUnlocked, setIsEditUnlocked] = useState(false);
   const [projectFilter, setProjectFilter] = useState("all");
   const [memberFilter, setMemberFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useState([]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
@@ -452,12 +518,15 @@ function App() {
     if (projectFilter === projectId) setProjectFilter("all");
   };
 
-  const handleMoveProject = (index, direction) => {
+  const handleReorderProjects = (draggedId, targetId) => {
+    if (draggedId === targetId) return;
     setProjects((prev) => {
-      const newIndex = index + direction;
-      if (newIndex < 0 || newIndex >= prev.length) return prev;
+      const fromIndex = prev.findIndex((p) => p.id === draggedId);
+      const toIndex = prev.findIndex((p) => p.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
       const updated = [...prev];
-      [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
       return updated;
     });
   };
@@ -469,11 +538,19 @@ function App() {
       ? []
       : members.filter((m) => m.id === memberFilter);
   const showUnassignedColumn = memberFilter === "all" || memberFilter === UNASSIGNED;
-  const isFiltered = projectFilter !== "all" || memberFilter !== "all" || statusFilter !== "all";
+  const isFiltered = projectFilter !== "all" || memberFilter !== "all" || statusFilters.length > 0;
   const totalColumns = 1 + visibleMembers.length + (showUnassignedColumn ? 1 : 0) + 1;
 
   const matchesStatusFilter = (task) =>
-    statusFilter === "all" ? true : statusFilter === "overdue" ? isOverdue(task) : task.status === statusFilter;
+    statusFilters.length === 0
+      ? true
+      : statusFilters.some((f) => (f === "overdue" ? isOverdue(task) : task.status === f));
+
+  const toggleStatusFilter = (value) => {
+    setStatusFilters((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  };
 
   const statusLegendOptions = [
     ...STATUS_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label, badgeClass: STATUS_META[opt.value].badgeClass })),
@@ -537,7 +614,7 @@ function App() {
         </div>
         {isFiltered && (
           <button
-            onClick={() => { setProjectFilter("all"); setMemberFilter("all"); setStatusFilter("all"); }}
+            onClick={() => { setProjectFilter("all"); setMemberFilter("all"); setStatusFilters([]); }}
             className="text-xs text-indigo-600 hover:underline"
           >
             필터 초기화
@@ -549,12 +626,12 @@ function App() {
             <button
               key={opt.value}
               type="button"
-              onClick={() => setStatusFilter((prev) => (prev === opt.value ? "all" : opt.value))}
-              title={`${opt.label} 상태만 보기`}
+              onClick={() => toggleStatusFilter(opt.value)}
+              title={`${opt.label} 상태 ${statusFilters.includes(opt.value) ? "필터 해제" : "필터링(중복 선택 가능)"}`}
               className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full transition-opacity ${opt.badgeClass} ${
-                statusFilter === opt.value
+                statusFilters.includes(opt.value)
                   ? "ring-2 ring-offset-1 ring-indigo-400"
-                  : statusFilter !== "all"
+                  : statusFilters.length > 0
                     ? "opacity-40 hover:opacity-70"
                     : "hover:opacity-80"
               }`}
@@ -628,8 +705,7 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {visibleProjects.map((project, index) => {
-              const projectIndex = projects.findIndex((p) => p.id === project.id);
+            {visibleProjects.map((project) => {
               const unassignedTasks = tasks.filter(
                 (t) =>
                   t.projectId === project.id &&
@@ -638,48 +714,13 @@ function App() {
               );
               return (
                 <tr key={project.id}>
-                  <th className="border border-slate-200 bg-slate-50 p-2 text-left text-sm font-semibold text-slate-600 align-top sticky left-0 z-10">
-                    {isEditUnlocked ? (
-                      <div className="flex items-start gap-1">
-                        <div className="flex flex-col shrink-0 mt-0.5">
-                          <button
-                            onClick={() => handleMoveProject(projectIndex, -1)}
-                            disabled={projectIndex === 0}
-                            className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
-                            title="위로 이동"
-                            aria-label="위로 이동"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            onClick={() => handleMoveProject(projectIndex, 1)}
-                            disabled={projectIndex === projects.length - 1}
-                            className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
-                            title="아래로 이동"
-                            aria-label="아래로 이동"
-                          >
-                            ▼
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          value={project.name}
-                          onChange={(e) => handleRenameProject(project.id, e.target.value)}
-                          className="w-full bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-400 focus:bg-white rounded px-1 py-0.5 text-sm font-semibold text-slate-600 focus:outline-none"
-                        />
-                        <button
-                          onClick={() => handleDeleteProject(project.id)}
-                          className="shrink-0 mt-0.5 text-slate-300 hover:text-red-500 text-xs leading-none"
-                          title={`${project.name} 삭제`}
-                          aria-label={`${project.name} 삭제`}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="px-1 py-0.5">{project.name}</span>
-                    )}
-                  </th>
+                  <ProjectRowHeader
+                    project={project}
+                    isEditUnlocked={isEditUnlocked}
+                    onRename={handleRenameProject}
+                    onDelete={handleDeleteProject}
+                    onReorder={handleReorderProjects}
+                  />
                   {visibleMembers.map((member) => {
                     const cellTasks = tasks.filter(
                       (t) => t.projectId === project.id && t.assignee === member.id && matchesStatusFilter(t)
