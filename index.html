@@ -15,17 +15,22 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-const STORAGE_KEY = "work-matrix-data-v1";
+const STORAGE_KEY = "work-matrix-data-v2";
 const UNASSIGNED = "";
 
 const INITIAL_MEMBERS = ["김철수", "이영희", "박민수"];
-const INITIAL_PROJECTS = ["자율주행 모빌리티 엑스포", "커넥티드 카 서비스 기획", "팀 공통(총무)"];
+
+const INITIAL_PROJECTS = [
+  { id: "p1", name: "자율주행 모빌리티 엑스포" },
+  { id: "p2", name: "커넥티드 카 서비스 기획" },
+  { id: "p3", name: "팀 공통(총무)" },
+];
 
 const INITIAL_TASKS = [
   {
     id: "t1",
     title: "부스 기획 및 운영안 작성",
-    project: "자율주행 모빌리티 엑스포",
+    projectId: "p1",
     assignee: "김철수",
     startDate: "2026-08-01",
     endDate: "2026-08-14",
@@ -33,7 +38,7 @@ const INITIAL_TASKS = [
   {
     id: "t2",
     title: "텔레매틱스 기반 고객 데이터 분석",
-    project: "커넥티드 카 서비스 기획",
+    projectId: "p2",
     assignee: "이영희",
     startDate: "2026-08-20",
     endDate: "2026-09-10",
@@ -41,7 +46,7 @@ const INITIAL_TASKS = [
   {
     id: "t3",
     title: "월간 법인카드 사용 내역 정산",
-    project: "팀 공통(총무)",
+    projectId: "p3",
     assignee: "박민수",
     startDate: "2026-08-25",
     endDate: "2026-08-31",
@@ -69,7 +74,7 @@ function formatDateRange(start, end) {
 
 function TaskModal({ members, projects, onClose, onSave }) {
   const [title, setTitle] = useState("");
-  const [project, setProject] = useState(projects[0] || "");
+  const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [assignee, setAssignee] = useState(members[0] || "");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -77,7 +82,7 @@ function TaskModal({ members, projects, onClose, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!title.trim() || !project || !startDate || !endDate) {
+    if (!title.trim() || !projectId || !startDate || !endDate) {
       setError("모든 항목을 입력해 주세요.");
       return;
     }
@@ -88,7 +93,7 @@ function TaskModal({ members, projects, onClose, onSave }) {
     onSave({
       id: `t${Date.now()}`,
       title: title.trim(),
-      project,
+      projectId,
       assignee,
       startDate,
       endDate,
@@ -122,12 +127,12 @@ function TaskModal({ members, projects, onClose, onSave }) {
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-1">과제명</label>
             <select
-              value={project}
-              onChange={(e) => setProject(e.target.value)}
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
               {projects.map((p) => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
@@ -199,7 +204,7 @@ function TaskCard({ task, onDragStart }) {
   );
 }
 
-function MatrixCell({ project, member, tasks, onDragStart, onDrop }) {
+function MatrixCell({ projectId, member, tasks, onDragStart, onDrop }) {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragOver = (e) => {
@@ -213,7 +218,7 @@ function MatrixCell({ project, member, tasks, onDragStart, onDrop }) {
     e.preventDefault();
     setIsOver(false);
     const taskId = e.dataTransfer.getData("text/plain");
-    onDrop(taskId, project, member);
+    onDrop(taskId, projectId, member);
   };
 
   return (
@@ -237,10 +242,11 @@ function MatrixCell({ project, member, tasks, onDragStart, onDrop }) {
 function App() {
   const initial = useRef(loadInitialState());
   const [members, setMembers] = useState(initial.current.members);
-  const [projects] = useState(initial.current.projects);
+  const [projects, setProjects] = useState(initial.current.projects);
   const [tasks, setTasks] = useState(initial.current.tasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newMemberName, setNewMemberName] = useState("");
+  const [newProjectName, setNewProjectName] = useState("");
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
@@ -251,10 +257,10 @@ function App() {
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDrop = (taskId, project, member) => {
+  const handleDrop = (taskId, projectId, member) => {
     setTasks((prev) =>
       prev.map((t) =>
-        t.id === taskId ? { ...t, project, assignee: member } : t
+        t.id === taskId ? { ...t, projectId, assignee: member } : t
       )
     );
   };
@@ -286,6 +292,32 @@ function App() {
       prev.map((t) => (t.assignee === member ? { ...t, assignee: UNASSIGNED } : t))
     );
   };
+
+  const handleAddProject = (e) => {
+    e.preventDefault();
+    const name = newProjectName.trim();
+    if (!name) return;
+    setProjects((prev) => [...prev, { id: `p${Date.now()}`, name }]);
+    setNewProjectName("");
+  };
+
+  const handleRenameProject = (projectId, name) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, name } : p))
+    );
+  };
+
+  const handleMoveProject = (index, direction) => {
+    setProjects((prev) => {
+      const newIndex = index + direction;
+      if (newIndex < 0 || newIndex >= prev.length) return prev;
+      const updated = [...prev];
+      [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+      return updated;
+    });
+  };
+
+  const totalColumns = members.length + 3;
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -350,25 +382,52 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {projects.map((project) => {
+            {projects.map((project, index) => {
               const unassignedTasks = tasks.filter(
                 (t) =>
-                  t.project === project &&
+                  t.projectId === project.id &&
                   (!t.assignee || !members.includes(t.assignee))
               );
               return (
-                <tr key={project}>
-                  <th className="border border-slate-200 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-600 align-top sticky left-0 z-10">
-                    {project}
+                <tr key={project.id}>
+                  <th className="border border-slate-200 bg-slate-50 p-2 text-left text-sm font-semibold text-slate-600 align-top sticky left-0 z-10">
+                    <div className="flex items-start gap-1">
+                      <div className="flex flex-col shrink-0 mt-0.5">
+                        <button
+                          onClick={() => handleMoveProject(index, -1)}
+                          disabled={index === 0}
+                          className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
+                          title="위로 이동"
+                          aria-label="위로 이동"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => handleMoveProject(index, 1)}
+                          disabled={index === projects.length - 1}
+                          className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
+                          title="아래로 이동"
+                          aria-label="아래로 이동"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={project.name}
+                        onChange={(e) => handleRenameProject(project.id, e.target.value)}
+                        className="w-full bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-400 focus:bg-white rounded px-1 py-0.5 text-sm font-semibold text-slate-600 focus:outline-none"
+                      />
+                    </div>
                   </th>
                   {members.map((member) => {
                     const cellTasks = tasks.filter(
-                      (t) => t.project === project && t.assignee === member
+                      (t) => t.projectId === project.id && t.assignee === member
                     );
                     return (
                       <MatrixCell
-                        key={`${project}-${member}`}
-                        project={project}
+                        key={`${project.id}-${member}`}
+                        projectId={project.id}
                         member={member}
                         tasks={cellTasks}
                         onDragStart={handleDragStart}
@@ -377,8 +436,8 @@ function App() {
                     );
                   })}
                   <MatrixCell
-                    key={`${project}-unassigned`}
-                    project={project}
+                    key={`${project.id}-unassigned`}
+                    projectId={project.id}
                     member={UNASSIGNED}
                     tasks={unassignedTasks}
                     onDragStart={handleDragStart}
@@ -388,6 +447,25 @@ function App() {
                 </tr>
               );
             })}
+            <tr>
+              <td colSpan={totalColumns} className="border border-slate-200 bg-slate-50 p-2">
+                <form onSubmit={handleAddProject} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    placeholder="새 과제명"
+                    className="w-56 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
+                  >
+                    + 과제 추가
+                  </button>
+                </form>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
