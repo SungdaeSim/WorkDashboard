@@ -391,14 +391,17 @@ function App() {
   const importInputRef = useRef(null);
 
   const handleSaveData = () => {
-    const now = new Date();
-    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-    const defaultName = loadedFileName || `work-matrix-${stamp}.json`;
-    let filename = window.prompt("저장할 파일 이름을 입력하세요.", defaultName);
-    if (filename === null) return;
-    filename = filename.trim();
-    if (!filename) return;
-    if (!/\.json$/i.test(filename)) filename += ".json";
+    let filename = loadedFileName;
+    if (!filename) {
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+      let input = window.prompt("저장할 파일 이름을 입력하세요.", `work-matrix-${stamp}.json`);
+      if (input === null) return;
+      input = input.trim();
+      if (!input) return;
+      if (!/\.json$/i.test(input)) input += ".json";
+      filename = input;
+    }
 
     const data = { members, projects, tasks };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
