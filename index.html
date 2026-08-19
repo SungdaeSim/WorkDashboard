@@ -341,7 +341,7 @@ function TaskCard({ task, onDragStart, onEdit }) {
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
       onDoubleClick={(e) => { e.stopPropagation(); onEdit(task); }}
-      title="더블클릭하여 수정"
+      title="더블클릭하여 수정 · Shift+드래그로 복사"
       className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow`}
     >
       <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
@@ -357,25 +357,32 @@ function TaskCard({ task, onDragStart, onEdit }) {
 
 function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask, onCreateTask, isRowHighlighted, isColHighlighted, onHoverCell, onHoverEnd }) {
   const [isOver, setIsOver] = useState(false);
+  const [isCopyMode, setIsCopyMode] = useState(false);
 
   const handleDragOver = (e) => {
     e.preventDefault();
     if (!isOver) setIsOver(true);
+    e.dataTransfer.dropEffect = e.shiftKey ? "copy" : "move";
+    if (isCopyMode !== e.shiftKey) setIsCopyMode(e.shiftKey);
   };
 
-  const handleDragLeave = () => setIsOver(false);
+  const handleDragLeave = () => {
+    setIsOver(false);
+    setIsCopyMode(false);
+  };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsOver(false);
+    setIsCopyMode(false);
     const taskId = e.dataTransfer.getData("text/plain");
-    onDrop(taskId, projectId, member);
+    onDrop(taskId, projectId, member, e.shiftKey);
   };
 
   let bgClass = "bg-white";
   if (isRowHighlighted && isColHighlighted) bgClass = "bg-slate-100";
   else if (isRowHighlighted || isColHighlighted) bgClass = "bg-slate-50";
-  if (isOver) bgClass = "bg-indigo-50";
+  if (isOver) bgClass = isCopyMode ? "bg-emerald-50" : "bg-indigo-50";
 
   return (
     <td
@@ -636,10 +643,18 @@ function App() {
 
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData("text/plain", taskId);
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.effectAllowed = "copyMove";
   };
 
-  const handleDrop = (taskId, projectId, member) => {
+  const handleDrop = (taskId, projectId, member, shouldCopy) => {
+    if (shouldCopy) {
+      setTasks((prev) => {
+        const original = prev.find((t) => t.id === taskId);
+        if (!original) return prev;
+        return [...prev, { ...original, id: `t${Date.now()}`, projectId, assignee: member }];
+      });
+      return;
+    }
     setTasks((prev) =>
       prev.map((t) =>
         t.id === taskId ? { ...t, projectId, assignee: member } : t
