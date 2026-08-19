@@ -110,6 +110,74 @@ const JSON_FILE_PICKER_OPTIONS = {
   excludeAcceptAllOption: false,
 };
 
+// 마지막으로 열거나 저장한 파일의 폴더를 기억해뒀다가, 다음번 "불러오기"/"저장"
+// 대화상자가 그 폴더에서 시작하도록 한다(브라우저를 새로 열어도 유지됨).
+// 페이지가 처음 실행되는 시점에는 index.html 파일 자체의 폴더를 알아낼 방법이
+// 없다는 게 브라우저 보안 정책상의 한계라, 최초 1회는 사용자가 직접 폴더까지
+// 이동해 파일을 선택해야 하며 그 다음부터는 자동으로 그 폴더에서 시작한다.
+const IDB_NAME = "work-matrix-fs";
+const IDB_STORE = "handles";
+const IDB_KEY = "lastDir";
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGetLastDirHandle() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(IDB_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+async function idbSetLastDirHandle(handle) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    // 위치 기억은 부가 기능이므로 실패해도 무시
+  }
+}
+
+async function pickOpenFile(startInHandle) {
+  try {
+    return await window.showOpenFilePicker(
+      startInHandle ? { ...JSON_FILE_PICKER_OPTIONS, startIn: startInHandle } : JSON_FILE_PICKER_OPTIONS
+    );
+  } catch (err) {
+    if (err && err.name === "AbortError") throw err;
+    if (startInHandle) return await window.showOpenFilePicker(JSON_FILE_PICKER_OPTIONS);
+    throw err;
+  }
+}
+
+async function pickSaveFile(suggestedName, startInHandle) {
+  const options = { suggestedName, ...JSON_FILE_PICKER_OPTIONS };
+  try {
+    return await window.showSaveFilePicker(startInHandle ? { ...options, startIn: startInHandle } : options);
+  } catch (err) {
+    if (err && err.name === "AbortError") throw err;
+    if (startInHandle) return await window.showSaveFilePicker(options);
+    throw err;
+  }
+}
+
 function TaskFormModal({ members, projects, task, onClose, onSave, onDelete }) {
   const isEditing = Boolean(task);
   const [title, setTitle] = useState(task?.title || "");
@@ -426,10 +494,8 @@ function App() {
   const saveAsNewFile = async (json) => {
     let handle;
     try {
-      handle = await window.showSaveFilePicker({
-        suggestedName: loadedFileName || defaultFileName(),
-        ...JSON_FILE_PICKER_OPTIONS,
-      });
+      const startIn = fileHandleRef.current || (await idbGetLastDirHandle());
+      handle = await pickSaveFile(loadedFileName || defaultFileName(), startIn);
     } catch (err) {
       if (err && err.name === "AbortError") return;
       alert("저장 위치를 선택하는 중 오류가 발생했습니다: " + (err?.message || err));
@@ -443,6 +509,7 @@ function App() {
     }
     fileHandleRef.current = handle;
     setLoadedFileName(handle.name);
+    idbSetLastDirHandle(handle);
   };
 
   const handleSaveData = async () => {
@@ -497,7 +564,8 @@ function App() {
     }
     let handle;
     try {
-      [handle] = await window.showOpenFilePicker(JSON_FILE_PICKER_OPTIONS);
+      const startIn = fileHandleRef.current || (await idbGetLastDirHandle());
+      [handle] = await pickOpenFile(startIn);
     } catch (err) {
       if (err && err.name === "AbortError") return;
       alert("파일을 여는 중 오류가 발생했습니다: " + (err?.message || err));
@@ -522,6 +590,7 @@ function App() {
       `'${file.name}' 파일 내용으로 현재 데이터를 덮어씁니다.\n계속하시겠습니까?`
     );
     if (!confirmed) return;
+    idbSetLastDirHandle(handle);
     setMembers(normalized.members);
     setProjects(normalized.projects);
     setTasks(normalized.tasks);
