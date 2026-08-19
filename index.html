@@ -330,6 +330,7 @@ function App() {
   const [isEditUnlocked, setIsEditUnlocked] = useState(false);
   const [projectFilter, setProjectFilter] = useState("all");
   const [memberFilter, setMemberFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
@@ -468,8 +469,16 @@ function App() {
       ? []
       : members.filter((m) => m.id === memberFilter);
   const showUnassignedColumn = memberFilter === "all" || memberFilter === UNASSIGNED;
-  const isFiltered = projectFilter !== "all" || memberFilter !== "all";
+  const isFiltered = projectFilter !== "all" || memberFilter !== "all" || statusFilter !== "all";
   const totalColumns = 1 + visibleMembers.length + (showUnassignedColumn ? 1 : 0) + 1;
+
+  const matchesStatusFilter = (task) =>
+    statusFilter === "all" ? true : statusFilter === "overdue" ? isOverdue(task) : task.status === statusFilter;
+
+  const statusLegendOptions = [
+    ...STATUS_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label, badgeClass: STATUS_META[opt.value].badgeClass })),
+    { value: "overdue", label: "지연", badgeClass: "bg-red-50 text-red-600" },
+  ];
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -528,7 +537,7 @@ function App() {
         </div>
         {isFiltered && (
           <button
-            onClick={() => { setProjectFilter("all"); setMemberFilter("all"); }}
+            onClick={() => { setProjectFilter("all"); setMemberFilter("all"); setStatusFilter("all"); }}
             className="text-xs text-indigo-600 hover:underline"
           >
             필터 초기화
@@ -536,12 +545,23 @@ function App() {
         )}
         <div className="flex items-center gap-1.5 ml-auto">
           <span className="text-xs text-slate-400 mr-1">상태</span>
-          {STATUS_OPTIONS.map((opt) => (
-            <span key={opt.value} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${STATUS_META[opt.value].badgeClass}`}>
+          {statusLegendOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setStatusFilter((prev) => (prev === opt.value ? "all" : opt.value))}
+              title={`${opt.label} 상태만 보기`}
+              className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full transition-opacity ${opt.badgeClass} ${
+                statusFilter === opt.value
+                  ? "ring-2 ring-offset-1 ring-indigo-400"
+                  : statusFilter !== "all"
+                    ? "opacity-40 hover:opacity-70"
+                    : "hover:opacity-80"
+              }`}
+            >
               {opt.label}
-            </span>
+            </button>
           ))}
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">지연</span>
         </div>
       </div>
 
@@ -613,7 +633,8 @@ function App() {
               const unassignedTasks = tasks.filter(
                 (t) =>
                   t.projectId === project.id &&
-                  (!t.assignee || !members.some((m) => m.id === t.assignee))
+                  (!t.assignee || !members.some((m) => m.id === t.assignee)) &&
+                  matchesStatusFilter(t)
               );
               return (
                 <tr key={project.id}>
@@ -661,7 +682,7 @@ function App() {
                   </th>
                   {visibleMembers.map((member) => {
                     const cellTasks = tasks.filter(
-                      (t) => t.projectId === project.id && t.assignee === member.id
+                      (t) => t.projectId === project.id && t.assignee === member.id && matchesStatusFilter(t)
                     );
                     return (
                       <MatrixCell
