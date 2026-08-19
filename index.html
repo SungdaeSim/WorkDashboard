@@ -95,6 +95,10 @@ function formatDateRange(start, end) {
   return `${start} ~ ${end}`;
 }
 
+function isCopyModifier(e) {
+  return e.shiftKey || e.ctrlKey;
+}
+
 function defaultFileName() {
   const now = new Date();
   const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
@@ -341,7 +345,7 @@ function TaskCard({ task, onDragStart, onEdit }) {
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
       onDoubleClick={(e) => { e.stopPropagation(); onEdit(task); }}
-      title="더블클릭하여 수정 · Shift+드래그로 복사"
+      title="더블클릭하여 수정 · Shift/Ctrl+드래그로 복사"
       className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow`}
     >
       <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
@@ -362,8 +366,9 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask,
   const handleDragOver = (e) => {
     e.preventDefault();
     if (!isOver) setIsOver(true);
-    e.dataTransfer.dropEffect = e.shiftKey ? "copy" : "move";
-    if (isCopyMode !== e.shiftKey) setIsCopyMode(e.shiftKey);
+    const copy = isCopyModifier(e);
+    e.dataTransfer.dropEffect = copy ? "copy" : "move";
+    if (isCopyMode !== copy) setIsCopyMode(copy);
   };
 
   const handleDragLeave = () => {
@@ -376,7 +381,7 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask,
     setIsOver(false);
     setIsCopyMode(false);
     const taskId = e.dataTransfer.getData("text/plain");
-    onDrop(taskId, projectId, member, e.shiftKey);
+    onDrop(taskId, projectId, member, isCopyModifier(e));
   };
 
   let bgClass = "bg-white";
