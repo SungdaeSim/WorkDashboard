@@ -534,12 +534,13 @@ function App() {
     });
   };
 
+  const sortedMembers = [...members].sort((a, b) => a.name.localeCompare(b.name, "ko"));
   const visibleProjects = projectFilter === "all" ? projects : projects.filter((p) => p.id === projectFilter);
   const visibleMembers = memberFilter === "all"
-    ? members
+    ? sortedMembers
     : memberFilter === UNASSIGNED
       ? []
-      : members.filter((m) => m.id === memberFilter);
+      : sortedMembers.filter((m) => m.id === memberFilter);
   const showUnassignedColumn = memberFilter === "all" || memberFilter === UNASSIGNED;
   const isDefaultStatusFilter =
     statusFilters.length === DEFAULT_STATUS_FILTERS.length &&
@@ -612,7 +613,7 @@ function App() {
             className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             <option value="all">전체 담당자</option>
-            {members.map((m) => (
+            {sortedMembers.map((m) => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
             <option value={UNASSIGNED}>담당자 미지정</option>
@@ -787,7 +788,7 @@ function App() {
 
       {isModalOpen && (
         <TaskFormModal
-          members={members}
+          members={sortedMembers}
           projects={projects}
           task={editingTask}
           onClose={() => { setIsModalOpen(false); setEditingTask(null); }}
