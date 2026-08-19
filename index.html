@@ -48,47 +48,7 @@ function isOverdue(task) {
   return task.status !== "done" && task.endDate < TODAY;
 }
 
-const INITIAL_MEMBERS = [
-  { id: "m1", name: "김철수" },
-  { id: "m2", name: "이영희" },
-  { id: "m3", name: "박민수" },
-];
-
-const INITIAL_PROJECTS = [
-  { id: "p1", name: "자율주행 모빌리티 엑스포" },
-  { id: "p2", name: "커넥티드 카 서비스 기획" },
-  { id: "p3", name: "팀 공통(총무)" },
-];
-
-const INITIAL_TASKS = [
-  {
-    id: "t1",
-    title: "부스 기획 및 운영안 작성",
-    projectId: "p1",
-    assignee: "m1",
-    startDate: "2026-08-01",
-    endDate: "2026-08-14",
-    status: "done",
-  },
-  {
-    id: "t2",
-    title: "텔레매틱스 기반 고객 데이터 분석",
-    projectId: "p2",
-    assignee: "m2",
-    startDate: "2026-08-20",
-    endDate: "2026-09-10",
-    status: "pending",
-  },
-  {
-    id: "t3",
-    title: "월간 법인카드 사용 내역 정산",
-    projectId: "p3",
-    assignee: "m3",
-    startDate: "2026-08-25",
-    endDate: "2026-08-31",
-    status: "pending",
-  },
-];
+const EMPTY_STATE = { members: [], projects: [], tasks: [], loadedFileName: null };
 
 function loadInitialState() {
   try {
@@ -96,13 +56,13 @@ function loadInitialState() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.tasks) && Array.isArray(parsed.members) && Array.isArray(parsed.projects)) {
-        return parsed;
+        return { ...EMPTY_STATE, ...parsed };
       }
     }
   } catch (e) {
     console.warn("저장된 데이터를 불러오지 못했습니다.", e);
   }
-  return { members: INITIAL_MEMBERS, projects: INITIAL_PROJECTS, tasks: INITIAL_TASKS };
+  return EMPTY_STATE;
 }
 
 function formatDateRange(start, end) {
@@ -394,6 +354,7 @@ function App() {
   const [members, setMembers] = useState(initial.current.members);
   const [projects, setProjects] = useState(initial.current.projects);
   const [tasks, setTasks] = useState(initial.current.tasks);
+  const [loadedFileName, setLoadedFileName] = useState(initial.current.loadedFileName);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [newMemberName, setNewMemberName] = useState("");
@@ -405,33 +366,41 @@ function App() {
   const importInputRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
-  }, [members, projects, tasks]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks, loadedFileName }));
+  }, [members, projects, tasks, loadedFileName]);
 
-  const handleExportData = () => {
+  const handleSaveData = () => {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    const defaultName = loadedFileName || `work-matrix-${stamp}.json`;
+    let filename = window.prompt("저장할 파일 이름을 입력하세요.", defaultName);
+    if (filename === null) return;
+    filename = filename.trim();
+    if (!filename) return;
+    if (!/\.json$/i.test(filename)) filename += ".json";
+
     const data = { members, projects, tasks };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const now = new Date();
-    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
     const a = document.createElement("a");
     a.href = url;
-    a.download = `work-matrix-${stamp}.json`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    setLoadedFileName(filename);
   };
 
-  const handleImportClick = () => {
+  const handleLoadClick = () => {
     if (!isEditUnlocked) {
-      alert("가져오기는 편집 잠금을 해제한 후 이용할 수 있습니다.");
+      alert("불러오기는 편집 잠금을 해제한 후 이용할 수 있습니다.");
       return;
     }
     importInputRef.current?.click();
   };
 
-  const handleImportFile = (e) => {
+  const handleLoadFile = (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
@@ -445,7 +414,7 @@ function App() {
         return;
       }
       if (!parsed || !Array.isArray(parsed.members) || !Array.isArray(parsed.projects) || !Array.isArray(parsed.tasks)) {
-        alert("이 앱에서 내보낸 백업 파일이 아닙니다.");
+        alert("이 앱에서 저장한 파일이 아닙니다.");
         return;
       }
       const confirmed = window.confirm(
@@ -455,6 +424,7 @@ function App() {
       setMembers(parsed.members);
       setProjects(parsed.projects);
       setTasks(parsed.tasks);
+      setLoadedFileName(file.name);
     };
     reader.readAsText(file);
   };
@@ -622,7 +592,12 @@ function App() {
     <div className="w-full px-6 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">팀 업무 배분 매트릭스</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-2xl font-bold text-slate-800">팀 업무 배분 매트릭스</h1>
+            {loadedFileName && (
+              <span className="text-xs text-slate-400">{loadedFileName}</span>
+            )}
+          </div>
           <p className="text-sm text-slate-500 mt-1">팀원별 · 과제별 업무를 한눈에 확인하고 드래그로 재배치하세요.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -630,22 +605,22 @@ function App() {
             type="file"
             ref={importInputRef}
             accept="application/json"
-            onChange={handleImportFile}
+            onChange={handleLoadFile}
             className="hidden"
           />
           <button
-            onClick={handleExportData}
+            onClick={handleSaveData}
             className="text-sm font-medium px-4 py-2 rounded-lg border border-slate-300 text-slate-600 bg-white hover:bg-slate-50"
             title="현재 데이터를 파일로 저장"
           >
-            내보내기
+            저장
           </button>
           <button
-            onClick={handleImportClick}
+            onClick={handleLoadClick}
             className="text-sm font-medium px-4 py-2 rounded-lg border border-slate-300 text-slate-600 bg-white hover:bg-slate-50"
             title="파일에서 데이터 불러오기"
           >
-            가져오기
+            불러오기
           </button>
           <button
             onClick={handleToggleEditLock}
