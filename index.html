@@ -15,10 +15,15 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-const STORAGE_KEY = "work-matrix-data-v2";
+const STORAGE_KEY = "work-matrix-data-v3";
 const UNASSIGNED = "";
+const EDIT_PASSWORD = "1234"; // 배포 전 반드시 변경하세요
 
-const INITIAL_MEMBERS = ["김철수", "이영희", "박민수"];
+const INITIAL_MEMBERS = [
+  { id: "m1", name: "김철수" },
+  { id: "m2", name: "이영희" },
+  { id: "m3", name: "박민수" },
+];
 
 const INITIAL_PROJECTS = [
   { id: "p1", name: "자율주행 모빌리티 엑스포" },
@@ -31,7 +36,7 @@ const INITIAL_TASKS = [
     id: "t1",
     title: "부스 기획 및 운영안 작성",
     projectId: "p1",
-    assignee: "김철수",
+    assignee: "m1",
     startDate: "2026-08-01",
     endDate: "2026-08-14",
   },
@@ -39,7 +44,7 @@ const INITIAL_TASKS = [
     id: "t2",
     title: "텔레매틱스 기반 고객 데이터 분석",
     projectId: "p2",
-    assignee: "이영희",
+    assignee: "m2",
     startDate: "2026-08-20",
     endDate: "2026-09-10",
   },
@@ -47,7 +52,7 @@ const INITIAL_TASKS = [
     id: "t3",
     title: "월간 법인카드 사용 내역 정산",
     projectId: "p3",
-    assignee: "박민수",
+    assignee: "m3",
     startDate: "2026-08-25",
     endDate: "2026-08-31",
   },
@@ -75,7 +80,7 @@ function formatDateRange(start, end) {
 function TaskModal({ members, projects, onClose, onSave }) {
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [assignee, setAssignee] = useState(members[0] || "");
+  const [assignee, setAssignee] = useState(members[0]?.id || UNASSIGNED);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [error, setError] = useState("");
@@ -145,7 +150,7 @@ function TaskModal({ members, projects, onClose, onSave }) {
             >
               <option value={UNASSIGNED}>담당자 미지정</option>
               {members.map((m) => (
-                <option key={m} value={m}>{m}</option>
+                <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
           </div>
@@ -247,6 +252,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newMemberName, setNewMemberName] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
+  const [isEditUnlocked, setIsEditUnlocked] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
@@ -270,26 +276,48 @@ function App() {
     setIsModalOpen(false);
   };
 
+  const handleToggleEditLock = () => {
+    if (isEditUnlocked) {
+      setIsEditUnlocked(false);
+      return;
+    }
+    const input = window.prompt("담당자/과제 편집을 위한 비밀번호를 입력하세요.");
+    if (input === null) return;
+    if (input === EDIT_PASSWORD) {
+      setIsEditUnlocked(true);
+    } else {
+      alert("비밀번호가 올바르지 않습니다.");
+    }
+  };
+
   const handleAddMember = (e) => {
     e.preventDefault();
     const name = newMemberName.trim();
     if (!name) return;
-    if (members.includes(name)) {
+    if (members.some((m) => m.name === name)) {
       alert("이미 존재하는 담당자입니다.");
       return;
     }
-    setMembers((prev) => [...prev, name]);
+    setMembers((prev) => [...prev, { id: `m${Date.now()}`, name }]);
     setNewMemberName("");
   };
 
-  const handleDeleteMember = (member) => {
+  const handleRenameMember = (memberId, name) => {
+    setMembers((prev) =>
+      prev.map((m) => (m.id === memberId ? { ...m, name } : m))
+    );
+  };
+
+  const handleDeleteMember = (memberId) => {
+    const member = members.find((m) => m.id === memberId);
+    if (!member) return;
     const confirmed = window.confirm(
-      `'${member}' 담당자를 삭제하시겠습니까?\n담당하던 업무는 '담당자 미지정'으로 이동합니다.`
+      `'${member.name}' 담당자를 삭제하시겠습니까?\n담당하던 업무는 '담당자 미지정'으로 이동합니다.`
     );
     if (!confirmed) return;
-    setMembers((prev) => prev.filter((m) => m !== member));
+    setMembers((prev) => prev.filter((m) => m.id !== memberId));
     setTasks((prev) =>
-      prev.map((t) => (t.assignee === member ? { ...t, assignee: UNASSIGNED } : t))
+      prev.map((t) => (t.assignee === memberId ? { ...t, assignee: UNASSIGNED } : t))
     );
   };
 
@@ -305,6 +333,19 @@ function App() {
     setProjects((prev) =>
       prev.map((p) => (p.id === projectId ? { ...p, name } : p))
     );
+  };
+
+  const handleDeleteProject = (projectId) => {
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
+    const affectedCount = tasks.filter((t) => t.projectId === projectId).length;
+    const warning = affectedCount > 0
+      ? `\n이 과제에 속한 업무 ${affectedCount}개도 함께 삭제됩니다.`
+      : "";
+    const confirmed = window.confirm(`'${project.name}' 과제를 삭제하시겠습니까?${warning}`);
+    if (!confirmed) return;
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    setTasks((prev) => prev.filter((t) => t.projectId !== projectId));
   };
 
   const handleMoveProject = (index, direction) => {
@@ -326,12 +367,24 @@ function App() {
           <h1 className="text-2xl font-bold text-slate-800">팀 업무 배분 매트릭스</h1>
           <p className="text-sm text-slate-500 mt-1">팀원별 · 과제별 업무를 한눈에 확인하고 드래그로 재배치하세요.</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm"
-        >
-          + 새 업무 추가
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleEditLock}
+            className={`text-sm font-medium px-4 py-2 rounded-lg border ${
+              isEditUnlocked
+                ? "border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
+                : "border-slate-300 text-slate-600 bg-white hover:bg-slate-50"
+            }`}
+          >
+            {isEditUnlocked ? "🔓 담당자/과제 편집 잠금" : "🔒 담당자/과제 편집 잠금 해제"}
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm"
+          >
+            + 새 업무 추가
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto bg-white rounded-xl shadow-sm border border-slate-200">
@@ -343,41 +396,54 @@ function App() {
               </th>
               {members.map((member) => (
                 <th
-                  key={member}
+                  key={member.id}
                   className="border border-slate-200 bg-slate-50 p-3 text-center text-sm font-semibold text-slate-600 min-w-[220px]"
                 >
-                  <div className="flex items-center justify-center gap-2">
-                    <span>{member}</span>
-                    <button
-                      onClick={() => handleDeleteMember(member)}
-                      className="text-slate-300 hover:text-red-500 text-xs leading-none"
-                      title={`${member} 삭제`}
-                      aria-label={`${member} 삭제`}
-                    >
-                      ✕
-                    </button>
-                  </div>
+                  {isEditUnlocked ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <input
+                        type="text"
+                        value={member.name}
+                        onChange={(e) => handleRenameMember(member.id, e.target.value)}
+                        className="w-24 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-400 focus:bg-white rounded px-1 py-0.5 text-sm font-semibold text-slate-600 text-center focus:outline-none"
+                      />
+                      <button
+                        onClick={() => handleDeleteMember(member.id)}
+                        className="text-slate-300 hover:text-red-500 text-xs leading-none"
+                        title={`${member.name} 삭제`}
+                        aria-label={`${member.name} 삭제`}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <span>{member.name}</span>
+                  )}
                 </th>
               ))}
               <th className="border border-slate-200 bg-slate-100 p-3 text-center text-sm font-semibold text-slate-500 italic min-w-[220px]">
                 담당자 미지정
               </th>
               <th className="border border-slate-200 bg-slate-50 p-3 text-center min-w-[160px]">
-                <form onSubmit={handleAddMember} className="flex items-center justify-center gap-1">
-                  <input
-                    type="text"
-                    value={newMemberName}
-                    onChange={(e) => setNewMemberName(e.target.value)}
-                    placeholder="담당자 이름"
-                    className="w-24 border border-slate-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-2 py-1 rounded-lg"
-                  >
-                    추가
-                  </button>
-                </form>
+                {isEditUnlocked ? (
+                  <form onSubmit={handleAddMember} className="flex items-center justify-center gap-1">
+                    <input
+                      type="text"
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      placeholder="담당자 이름"
+                      className="w-24 border border-slate-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-2 py-1 rounded-lg"
+                    >
+                      추가
+                    </button>
+                  </form>
+                ) : (
+                  <span className="text-xs text-slate-400">🔒 잠금됨</span>
+                )}
               </th>
             </tr>
           </thead>
@@ -386,49 +452,61 @@ function App() {
               const unassignedTasks = tasks.filter(
                 (t) =>
                   t.projectId === project.id &&
-                  (!t.assignee || !members.includes(t.assignee))
+                  (!t.assignee || !members.some((m) => m.id === t.assignee))
               );
               return (
                 <tr key={project.id}>
                   <th className="border border-slate-200 bg-slate-50 p-2 text-left text-sm font-semibold text-slate-600 align-top sticky left-0 z-10">
-                    <div className="flex items-start gap-1">
-                      <div className="flex flex-col shrink-0 mt-0.5">
+                    {isEditUnlocked ? (
+                      <div className="flex items-start gap-1">
+                        <div className="flex flex-col shrink-0 mt-0.5">
+                          <button
+                            onClick={() => handleMoveProject(index, -1)}
+                            disabled={index === 0}
+                            className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
+                            title="위로 이동"
+                            aria-label="위로 이동"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            onClick={() => handleMoveProject(index, 1)}
+                            disabled={index === projects.length - 1}
+                            className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
+                            title="아래로 이동"
+                            aria-label="아래로 이동"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={project.name}
+                          onChange={(e) => handleRenameProject(project.id, e.target.value)}
+                          className="w-full bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-400 focus:bg-white rounded px-1 py-0.5 text-sm font-semibold text-slate-600 focus:outline-none"
+                        />
                         <button
-                          onClick={() => handleMoveProject(index, -1)}
-                          disabled={index === 0}
-                          className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
-                          title="위로 이동"
-                          aria-label="위로 이동"
+                          onClick={() => handleDeleteProject(project.id)}
+                          className="shrink-0 mt-0.5 text-slate-300 hover:text-red-500 text-xs leading-none"
+                          title={`${project.name} 삭제`}
+                          aria-label={`${project.name} 삭제`}
                         >
-                          ▲
-                        </button>
-                        <button
-                          onClick={() => handleMoveProject(index, 1)}
-                          disabled={index === projects.length - 1}
-                          className="text-slate-300 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-300 text-[10px] leading-none"
-                          title="아래로 이동"
-                          aria-label="아래로 이동"
-                        >
-                          ▼
+                          ✕
                         </button>
                       </div>
-                      <input
-                        type="text"
-                        value={project.name}
-                        onChange={(e) => handleRenameProject(project.id, e.target.value)}
-                        className="w-full bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-400 focus:bg-white rounded px-1 py-0.5 text-sm font-semibold text-slate-600 focus:outline-none"
-                      />
-                    </div>
+                    ) : (
+                      <span className="px-1 py-0.5">{project.name}</span>
+                    )}
                   </th>
                   {members.map((member) => {
                     const cellTasks = tasks.filter(
-                      (t) => t.projectId === project.id && t.assignee === member
+                      (t) => t.projectId === project.id && t.assignee === member.id
                     );
                     return (
                       <MatrixCell
-                        key={`${project.id}-${member}`}
+                        key={`${project.id}-${member.id}`}
                         projectId={project.id}
-                        member={member}
+                        member={member.id}
                         tasks={cellTasks}
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
@@ -449,21 +527,25 @@ function App() {
             })}
             <tr>
               <td colSpan={totalColumns} className="border border-slate-200 bg-slate-50 p-2">
-                <form onSubmit={handleAddProject} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    placeholder="새 과제명"
-                    className="w-56 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
-                  >
-                    + 과제 추가
-                  </button>
-                </form>
+                {isEditUnlocked ? (
+                  <form onSubmit={handleAddProject} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      placeholder="새 과제명"
+                      className="w-56 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
+                    >
+                      + 과제 추가
+                    </button>
+                  </form>
+                ) : (
+                  <span className="text-xs text-slate-400">🔒 담당자/과제 편집이 잠겨 있습니다. 편집하려면 잠금을 해제하세요.</span>
+                )}
               </td>
             </tr>
           </tbody>
