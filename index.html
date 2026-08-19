@@ -15,7 +15,6 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-const STORAGE_KEY = "work-matrix-data-v4";
 const UNASSIGNED = "";
 const EDIT_PASSWORD = "1234"; // 배포 전 반드시 변경하세요
 
@@ -90,18 +89,6 @@ function normalizeData(parsed) {
     tasks: normalizedTasks,
     loadedFileName: typeof obj.loadedFileName === "string" ? obj.loadedFileName : null,
   };
-}
-
-function loadInitialState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return { ...EMPTY_STATE, ...normalizeData(JSON.parse(raw)) };
-    }
-  } catch (e) {
-    console.warn("저장된 데이터를 불러오지 못했습니다.", e);
-  }
-  return EMPTY_STATE;
 }
 
 function formatDateRange(start, end) {
@@ -389,11 +376,10 @@ function ProjectRowHeader({ project, isEditUnlocked, onRename, onDelete, onReord
 }
 
 function App() {
-  const initial = useRef(loadInitialState());
-  const [members, setMembers] = useState(initial.current.members);
-  const [projects, setProjects] = useState(initial.current.projects);
-  const [tasks, setTasks] = useState(initial.current.tasks);
-  const [loadedFileName, setLoadedFileName] = useState(initial.current.loadedFileName);
+  const [members, setMembers] = useState(EMPTY_STATE.members);
+  const [projects, setProjects] = useState(EMPTY_STATE.projects);
+  const [tasks, setTasks] = useState(EMPTY_STATE.tasks);
+  const [loadedFileName, setLoadedFileName] = useState(EMPTY_STATE.loadedFileName);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [newMemberName, setNewMemberName] = useState("");
@@ -403,10 +389,6 @@ function App() {
   const [memberFilter, setMemberFilter] = useState("all");
   const [statusFilters, setStatusFilters] = useState(DEFAULT_STATUS_FILTERS);
   const importInputRef = useRef(null);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks, loadedFileName }));
-  }, [members, projects, tasks, loadedFileName]);
 
   const handleSaveData = () => {
     const now = new Date();
