@@ -95,6 +95,21 @@ function formatDateRange(start, end) {
   return `${start} ~ ${end}`;
 }
 
+function defaultFileName() {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  return `work-matrix-${stamp}.json`;
+}
+
+// File System Access API는 Chrome/Edge에서만 지원됨 (Firefox/Safari는 미지원)
+const supportsFileSystemAccess =
+  typeof window.showOpenFilePicker === "function" && typeof window.showSaveFilePicker === "function";
+
+const JSON_FILE_PICKER_OPTIONS = {
+  types: [{ description: "JSON 파일", accept: { "application/json": [".json"] } }],
+  excludeAcceptAllOption: false,
+};
+
 function TaskFormModal({ members, projects, task, onClose, onSave, onDelete }) {
   const isEditing = Boolean(task);
   const [title, setTitle] = useState(task?.title || "");
@@ -389,22 +404,70 @@ function App() {
   const [memberFilter, setMemberFilter] = useState("all");
   const [statusFilters, setStatusFilters] = useState(DEFAULT_STATUS_FILTERS);
   const importInputRef = useRef(null);
+  const fileHandleRef = useRef(null);
 
-  const handleSaveData = () => {
+  const writeToHandle = async (handle, json) => {
+    const writable = await handle.createWritable();
+    await writable.write(json);
+    await writable.close();
+  };
+
+  const saveAsNewFile = async (json) => {
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: loadedFileName || defaultFileName(),
+        ...JSON_FILE_PICKER_OPTIONS,
+      });
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+      alert("저장 위치를 선택하는 중 오류가 발생했습니다: " + (err?.message || err));
+      return;
+    }
+    try {
+      await writeToHandle(handle, json);
+    } catch (err) {
+      alert("저장에 실패했습니다: " + (err?.message || err));
+      return;
+    }
+    fileHandleRef.current = handle;
+    setLoadedFileName(handle.name);
+  };
+
+  const handleSaveData = async () => {
+    const json = JSON.stringify({ members, projects, tasks }, null, 2);
+
+    if (supportsFileSystemAccess && fileHandleRef.current) {
+      const confirmed = window.confirm(`'${loadedFileName}' 파일을 덮어쓰시겠습니까?`);
+      if (confirmed) {
+        try {
+          await writeToHandle(fileHandleRef.current, json);
+        } catch (err) {
+          alert("저장에 실패했습니다: " + (err?.message || err));
+        }
+        return;
+      }
+      // 덮어쓰지 않음 → 다른 이름으로 저장
+      await saveAsNewFile(json);
+      return;
+    }
+
+    if (supportsFileSystemAccess) {
+      await saveAsNewFile(json);
+      return;
+    }
+
+    // Firefox/Safari 등 File System Access API 미지원 브라우저: 다운로드로 대체
     let filename = loadedFileName;
     if (!filename) {
-      const now = new Date();
-      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-      let input = window.prompt("저장할 파일 이름을 입력하세요.", `work-matrix-${stamp}.json`);
+      let input = window.prompt("저장할 파일 이름을 입력하세요.", defaultFileName());
       if (input === null) return;
       input = input.trim();
       if (!input) return;
       if (!/\.json$/i.test(input)) input += ".json";
       filename = input;
     }
-
-    const data = { members, projects, tasks };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -416,8 +479,43 @@ function App() {
     setLoadedFileName(filename);
   };
 
-  const handleLoadClick = () => {
-    importInputRef.current?.click();
+  const handleLoadClick = async () => {
+    if (!supportsFileSystemAccess) {
+      importInputRef.current?.click();
+      return;
+    }
+    let handle;
+    try {
+      [handle] = await window.showOpenFilePicker(JSON_FILE_PICKER_OPTIONS);
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+      alert("파일을 여는 중 오류가 발생했습니다: " + (err?.message || err));
+      return;
+    }
+    let file;
+    try {
+      file = await handle.getFile();
+    } catch (err) {
+      alert("파일을 읽을 수 없습니다: " + (err?.message || err));
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch (err) {
+      alert("올바른 JSON 파일이 아닙니다.");
+      return;
+    }
+    const normalized = normalizeData(parsed);
+    const confirmed = window.confirm(
+      `'${file.name}' 파일 내용으로 현재 데이터를 덮어씁니다.\n계속하시겠습니까?`
+    );
+    if (!confirmed) return;
+    setMembers(normalized.members);
+    setProjects(normalized.projects);
+    setTasks(normalized.tasks);
+    setLoadedFileName(file.name);
+    fileHandleRef.current = handle;
   };
 
   const handleLoadFile = (e) => {
@@ -442,6 +540,7 @@ function App() {
       setProjects(normalized.projects);
       setTasks(normalized.tasks);
       setLoadedFileName(file.name);
+      fileHandleRef.current = null;
     };
     reader.readAsText(file);
   };
