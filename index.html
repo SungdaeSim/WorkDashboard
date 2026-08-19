@@ -31,6 +31,9 @@ const STATUS_META = {
   done: { label: "완료", badgeClass: "bg-emerald-50 text-emerald-600", borderClass: "border-l-emerald-400" },
 };
 
+// 완료 업무는 기본적으로 매트릭스에서 숨김
+const DEFAULT_STATUS_FILTERS = ["pending", "in_progress", "overdue"];
+
 function statusMeta(status) {
   return STATUS_META[status] || STATUS_META.pending;
 }
@@ -396,7 +399,7 @@ function App() {
   const [isEditUnlocked, setIsEditUnlocked] = useState(false);
   const [projectFilter, setProjectFilter] = useState("all");
   const [memberFilter, setMemberFilter] = useState("all");
-  const [statusFilters, setStatusFilters] = useState([]);
+  const [statusFilters, setStatusFilters] = useState(DEFAULT_STATUS_FILTERS);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, projects, tasks }));
@@ -538,7 +541,10 @@ function App() {
       ? []
       : members.filter((m) => m.id === memberFilter);
   const showUnassignedColumn = memberFilter === "all" || memberFilter === UNASSIGNED;
-  const isFiltered = projectFilter !== "all" || memberFilter !== "all" || statusFilters.length > 0;
+  const isDefaultStatusFilter =
+    statusFilters.length === DEFAULT_STATUS_FILTERS.length &&
+    DEFAULT_STATUS_FILTERS.every((v) => statusFilters.includes(v));
+  const isFiltered = projectFilter !== "all" || memberFilter !== "all" || !isDefaultStatusFilter;
   const totalColumns = 1 + visibleMembers.length + (showUnassignedColumn ? 1 : 0) + 1;
 
   const matchesStatusFilter = (task) =>
@@ -614,7 +620,7 @@ function App() {
         </div>
         {isFiltered && (
           <button
-            onClick={() => { setProjectFilter("all"); setMemberFilter("all"); setStatusFilters([]); }}
+            onClick={() => { setProjectFilter("all"); setMemberFilter("all"); setStatusFilters(DEFAULT_STATUS_FILTERS); }}
             className="text-xs text-indigo-600 hover:underline"
           >
             필터 초기화
