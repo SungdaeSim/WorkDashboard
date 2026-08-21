@@ -939,17 +939,17 @@ function App() {
         </div>
       </div>
 
-      <div className="overflow-x-auto bg-white rounded-xl shadow-sm border border-slate-200">
+      <div className="overflow-auto max-h-[75vh] bg-white rounded-xl shadow-sm border border-slate-200">
         <table className="border-collapse w-full">
           <thead>
             <tr>
-              <th className="border border-slate-200 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-600 min-w-[200px] sticky left-0 z-10">
+              <th className="border border-slate-200 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-600 min-w-[200px] sticky left-0 top-0 z-30">
                 과제 \ 담당자
               </th>
               {visibleMembers.map((member) => (
                 <th
                   key={member.id}
-                  className={`border border-slate-200 p-3 text-center text-sm font-semibold text-slate-600 min-w-[220px] transition-colors ${
+                  className={`border border-slate-200 p-3 text-center text-sm font-semibold text-slate-600 min-w-[220px] sticky top-0 z-20 transition-colors ${
                     hoveredMemberKey === member.id ? "bg-slate-100" : "bg-slate-50"
                   }`}
                 >
@@ -976,13 +976,13 @@ function App() {
                 </th>
               ))}
               {showUnassignedColumn && (
-                <th className={`border border-slate-200 p-3 text-center text-sm font-semibold text-slate-500 italic min-w-[220px] transition-colors ${
+                <th className={`border border-slate-200 p-3 text-center text-sm font-semibold text-slate-500 italic min-w-[220px] sticky top-0 z-20 transition-colors ${
                   hoveredMemberKey === UNASSIGNED ? "bg-slate-200" : "bg-slate-100"
                 }`}>
                   담당자 미지정
                 </th>
               )}
-              <th className="border border-slate-200 bg-slate-50 p-3 text-center min-w-[160px]">
+              <th className="border border-slate-200 bg-slate-50 p-3 text-center min-w-[160px] sticky top-0 z-20">
                 {isEditUnlocked ? (
                   <form onSubmit={handleAddMember} className="flex items-center justify-center gap-1">
                     <input
