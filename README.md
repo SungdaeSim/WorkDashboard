@@ -1,6 +1,6 @@
 # 팀 업무 배분 매트릭스 (Work Dashboard)
 
-**Release Version 1.0**
+**Release Version 1.1**
 
 팀원별 · 과제별 업무 배분을 한눈에 확인하고 드래그 앤 드롭으로 관리할 수 있는 2차원 매트릭스 형태의 웹 애플리케이션입니다.
 
@@ -59,3 +59,8 @@ npm pack react@18 react-dom@18 @babel/standalone @tailwindcss/browser
 - [React 18](https://react.dev/) (UMD 빌드, `vendor/`에 로컬 포함)
 - [Babel Standalone](https://babeljs.io/docs/babel-standalone) (브라우저에서 JSX 변환, `vendor/`에 로컬 포함)
 - [Tailwind CSS](https://tailwindcss.com/) (`@tailwindcss/browser` 런타임, `vendor/`에 로컬 포함)
+
+## 변경 이력
+
+- **v1.1** — 업무명 검색 기능 추가: `Ctrl+F`(Mac은 `Cmd+F`)로 검색창을 열어 업무명을 입력하면 일치하는 업무 카드가 노란색으로 강조되고 일치 건수가 표시됩니다. `Esc` 또는 `×` 버튼으로 닫을 수 있습니다.
+- **v1.0** — 최초 릴리즈. 과제×담당자 2차원 매트릭스 레이아웃, 업무 추가/수정/삭제, 드래그 앤 드롭(Shift/Ctrl+드래그 복사 포함), 행/열 강조, 상태(대기/진행중/완료) 및 지연 표시, 과제/담당자/상태 필터링, 담당자·과제 관리(편집 잠금 포함), 세로 스크롤 시 헤더 행/열 고정, JSON 파일 저장/불러오기(Chrome·Edge는 File System Access API로 원본 덮어쓰기 지원)를 제공합니다.
