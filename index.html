@@ -334,19 +334,22 @@ function TaskFormModal({ members, projects, task, onClose, onSave, onDelete }) {
   );
 }
 
-function TaskCard({ task, onDragStart, onEdit }) {
+function TaskCard({ task, onDragStart, onEdit, searchQuery }) {
   const meta = statusMeta(task.status);
   const overdue = isOverdue(task);
   const borderClass = overdue ? "border-l-red-500" : meta.borderClass;
   const badgeClass = overdue ? "bg-red-50 text-red-600" : meta.badgeClass;
   const dateClass = overdue ? "text-red-500 font-medium" : "text-slate-400";
+  const isSearchMatch = Boolean(searchQuery) && task.title.toLowerCase().includes(searchQuery);
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
       onDoubleClick={(e) => { e.stopPropagation(); onEdit(task); }}
       title="더블클릭하여 수정 · Shift/Ctrl+드래그로 복사"
-      className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow`}
+      className={`bg-white rounded-lg shadow-sm border border-slate-200 border-l-4 ${borderClass} px-3 py-2 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
+        isSearchMatch ? "ring-2 ring-yellow-400 bg-yellow-50" : ""
+      }`}
     >
       <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
       <div className="flex items-center justify-between mt-1.5 gap-2">
@@ -359,7 +362,7 @@ function TaskCard({ task, onDragStart, onEdit }) {
   );
 }
 
-function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask, onCreateTask, isRowHighlighted, isColHighlighted, onHoverCell, onHoverEnd }) {
+function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask, onCreateTask, isRowHighlighted, isColHighlighted, onHoverCell, onHoverEnd, searchQuery }) {
   const [isOver, setIsOver] = useState(false);
   const [isCopyMode, setIsCopyMode] = useState(false);
 
@@ -402,7 +405,7 @@ function MatrixCell({ projectId, member, tasks, onDragStart, onDrop, onEditTask,
     >
       <div className="min-h-[64px]">
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onDragStart={onDragStart} onEdit={onEditTask} />
+          <TaskCard key={task.id} task={task} onDragStart={onDragStart} onEdit={onEditTask} searchQuery={searchQuery} />
         ))}
       </div>
     </td>
@@ -503,8 +506,33 @@ function App() {
   const [draggingProjectId, setDraggingProjectId] = useState(null);
   const [hoveredProjectId, setHoveredProjectId] = useState(null);
   const [hoveredMemberKey, setHoveredMemberKey] = useState(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const importInputRef = useRef(null);
   const fileHandleRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  const closeSearch = () => {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      } else if (e.key === "Escape" && isSearchOpen) {
+        closeSearch();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSearchOpen]);
+
+  useEffect(() => {
+    if (isSearchOpen) searchInputRef.current?.focus();
+  }, [isSearchOpen]);
 
   const writeToHandle = async (handle, json) => {
     const writable = await handle.createWritable();
@@ -828,8 +856,36 @@ function App() {
     { value: "overdue", label: "지연", badgeClass: "bg-red-50 text-red-600" },
   ];
 
+  const activeSearchQuery = isSearchOpen ? searchQuery.trim().toLowerCase() : "";
+  const searchMatchCount = activeSearchQuery
+    ? tasks.filter((t) => t.title.toLowerCase().includes(activeSearchQuery)).length
+    : 0;
+
   return (
     <div className="w-full px-6 py-8">
+      {isSearchOpen && (
+        <div className="fixed top-4 right-6 z-40 bg-white rounded-lg shadow-lg border border-slate-300 px-3 py-2 flex items-center gap-2">
+          <span className="text-slate-400 text-sm" aria-hidden="true">🔍</span>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="업무명 검색 (Esc로 닫기)"
+            className="border border-slate-300 rounded-lg px-2 py-1 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          />
+          <span className="text-xs text-slate-400 whitespace-nowrap w-14 text-right">
+            {activeSearchQuery ? `${searchMatchCount}건 일치` : ""}
+          </span>
+          <button
+            onClick={closeSearch}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none"
+            aria-label="검색창 닫기"
+          >
+            &times;
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-baseline gap-2">
@@ -1045,6 +1101,7 @@ function App() {
                         isColHighlighted={hoveredMemberKey === member.id}
                         onHoverCell={handleHoverCell}
                         onHoverEnd={handleHoverEnd}
+                        searchQuery={activeSearchQuery}
                       />
                     );
                   })}
@@ -1062,6 +1119,7 @@ function App() {
                       isColHighlighted={hoveredMemberKey === UNASSIGNED}
                       onHoverCell={handleHoverCell}
                       onHoverEnd={handleHoverEnd}
+                      searchQuery={activeSearchQuery}
                     />
                   )}
                   <td className="border border-slate-200 bg-slate-50"></td>
