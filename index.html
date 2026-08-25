@@ -511,11 +511,29 @@ function App() {
   const importInputRef = useRef(null);
   const fileHandleRef = useRef(null);
   const searchInputRef = useRef(null);
+  // 마지막으로 불러오거나 저장한 시점의 데이터 스냅샷. 현재 데이터와 다르면
+  // "저장하지 않은 변경사항"이 있는 것으로 판단해 브라우저 종료 시 경고한다.
+  const savedSnapshotRef = useRef(JSON.stringify({ members: EMPTY_STATE.members, projects: EMPTY_STATE.projects, tasks: EMPTY_STATE.tasks }));
+  const markSaved = (m, p, t) => {
+    savedSnapshotRef.current = JSON.stringify({ members: m, projects: p, tasks: t });
+  };
 
   const closeSearch = () => {
     setIsSearchOpen(false);
     setSearchQuery("");
   };
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      const current = JSON.stringify({ members, projects, tasks });
+      if (current !== savedSnapshotRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [members, projects, tasks]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -559,6 +577,7 @@ function App() {
     fileHandleRef.current = handle;
     setLoadedFileName(handle.name);
     idbSetLastDirHandle(handle);
+    markSaved(members, projects, tasks);
   };
 
   const handleSaveData = async () => {
@@ -569,6 +588,7 @@ function App() {
       if (confirmed) {
         try {
           await writeToHandle(fileHandleRef.current, json);
+          markSaved(members, projects, tasks);
         } catch (err) {
           alert("저장에 실패했습니다: " + (err?.message || err));
         }
@@ -604,6 +624,7 @@ function App() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setLoadedFileName(filename);
+    markSaved(members, projects, tasks);
   };
 
   const handleLoadClick = async () => {
@@ -645,6 +666,7 @@ function App() {
     setTasks(normalized.tasks);
     setLoadedFileName(file.name);
     fileHandleRef.current = handle;
+    markSaved(normalized.members, normalized.projects, normalized.tasks);
   };
 
   const handleLoadFile = (e) => {
@@ -670,6 +692,7 @@ function App() {
       setTasks(normalized.tasks);
       setLoadedFileName(file.name);
       fileHandleRef.current = null;
+      markSaved(normalized.members, normalized.projects, normalized.tasks);
     };
     reader.readAsText(file);
   };
