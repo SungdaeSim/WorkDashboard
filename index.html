@@ -8,7 +8,7 @@
 <script src="vendor/react-dom.development.js"></script>
 <script src="vendor/babel.min.js"></script>
 <script src="vendor/tailwindcss-browser.js"></script>
-<script src="vendor/xlsx.core.min.js"></script>
+<script src="vendor/exceljs.min.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen">
 <div id="root"></div>
@@ -677,7 +677,7 @@ function App() {
     markSaved(members, projects, tasks);
   };
 
-  const buildExportRows = () => {
+  const buildExportModel = () => {
     const sortedM = [...members].sort((a, b) => a.name.localeCompare(b.name, "ko"));
     const vProjects = projectFilter === "all" ? projects : projects.filter((p) => p.id === projectFilter);
     const vMembers =
@@ -686,45 +686,83 @@ function App() {
     const matchesStatus = (task) =>
       statusFilters.length === 0 ? true : statusFilters.some((f) => (f === "overdue" ? isOverdue(task) : task.status === f));
 
-    const formatCellTasks = (cellTasks) =>
-      cellTasks
-        .map((t) => {
-          const meta = statusMeta(t.status);
-          const label = isOverdue(t) ? "지연" : meta.label;
-          const base = `${t.title} [${formatDateRange(t.startDate, t.endDate)}] (${label})`;
-          return t.memo ? `${base} - ${t.memo}` : base;
-        })
-        .join("\n");
+    // 업무카드와 마찬가지로 제목만 모아 줄바꿈으로 구분한다(한 사람이 여러
+    // 업무를 맡은 경우에도 전부 표시하기 위함).
+    const cellText = (cellTasks) => cellTasks.map((t) => t.title).join("\n");
 
-    const header = ["과제 \\ 담당자", ...vMembers.map((m) => m.name)];
-    if (showUnassigned) header.push("담당자 미지정");
+    const columns = [{ name: "과제 \\ 담당자", unassigned: false }, ...vMembers.map((m) => ({ name: m.name, unassigned: false }))];
+    if (showUnassigned) columns.push({ name: "담당자 미지정", unassigned: true });
 
-    const rows = [header];
-    vProjects.forEach((project) => {
-      const row = [project.name];
-      vMembers.forEach((member) => {
-        const cellTasks = tasks.filter((t) => t.projectId === project.id && t.assignee === member.id && matchesStatus(t));
-        row.push(formatCellTasks(cellTasks));
-      });
+    const rows = vProjects.map((project) => {
+      const cells = vMembers.map((member) =>
+        cellText(tasks.filter((t) => t.projectId === project.id && t.assignee === member.id && matchesStatus(t)))
+      );
       if (showUnassigned) {
-        const unassignedTasks = tasks.filter(
-          (t) => t.projectId === project.id && (!t.assignee || !members.some((m) => m.id === t.assignee)) && matchesStatus(t)
+        cells.push(
+          cellText(
+            tasks.filter(
+              (t) =>
+                t.projectId === project.id &&
+                (!t.assignee || !members.some((m) => m.id === t.assignee)) &&
+                matchesStatus(t)
+            )
+          )
         );
-        row.push(formatCellTasks(unassignedTasks));
       }
-      rows.push(row);
+      return { projectName: project.name, cells };
     });
 
-    return rows;
+    return { columns, rows };
+  };
+
+  const buildExportWorkbook = () => {
+    const { columns, rows } = buildExportModel();
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "팀 업무 배분 매트릭스";
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet("매트릭스", {
+      views: [{ state: "frozen", xSplit: 1, ySplit: 1 }],
+    });
+
+    sheet.columns = columns.map((col, i) => ({ width: i === 0 ? 22 : 32 }));
+
+    const THIN_BORDER = { style: "thin", color: { argb: "FFD9DEE7" } };
+    const CELL_BORDER = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
+
+    const headerRow = sheet.addRow(columns.map((c) => c.name));
+    headerRow.height = 22;
+    headerRow.eachCell((cell, colNumber) => {
+      const isUnassigned = columns[colNumber - 1].unassigned;
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, italic: isUnassigned };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: isUnassigned ? "FF818CF8" : "FF4F46E5" } };
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      cell.border = CELL_BORDER;
+    });
+
+    rows.forEach((row) => {
+      const values = [row.projectName, ...row.cells];
+      const excelRow = sheet.addRow(values);
+      const maxLines = Math.max(1, ...row.cells.map((c) => (c ? c.split("\n").length : 1)));
+      excelRow.height = Math.max(20, maxLines * 16 + 6);
+      excelRow.eachCell((cell, colNumber) => {
+        cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+        cell.border = CELL_BORDER;
+        if (colNumber === 1) {
+          cell.font = { bold: true };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+        } else if (columns[colNumber - 1].unassigned) {
+          cell.font = { italic: true, color: { argb: "FF64748B" } };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+        }
+      });
+    });
+
+    return workbook;
   };
 
   const handleExportExcel = async () => {
-    const rows = buildExportRows();
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    worksheet["!cols"] = rows[0].map((_, i) => ({ wch: i === 0 ? 22 : 32 }));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "매트릭스");
-    const arrayBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const workbook = buildExportWorkbook();
+    const arrayBuffer = await workbook.xlsx.writeBuffer();
     const filename = defaultExportFileName();
 
     if (supportsFileSystemAccess) {

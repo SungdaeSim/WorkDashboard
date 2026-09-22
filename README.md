@@ -22,14 +22,14 @@ open index.html
 | `react-dom.development.js` | React DOM 18 |
 | `babel.min.js` | Babel Standalone (브라우저 JSX 변환) |
 | `tailwindcss-browser.js` | Tailwind CSS (`@tailwindcss/browser`, 브라우저 런타임) |
-| `xlsx.core.min.js` | SheetJS `xlsx` (Excel 내보내기용, 코어 빌드) |
+| `exceljs.min.js` | ExcelJS (Excel 내보내기 및 서식 지정) |
 
 이 파일들은 `index.html`이 참조하는 정확한 버전이므로 임의로 교체하지 마세요. 업데이트가 필요하면 인터넷이 되는 PC에서 아래 명령으로 새로 받아 교체할 수 있습니다.
 
 ```
-npm pack react@18 react-dom@18 @babel/standalone @tailwindcss/browser xlsx@0.18.5
+npm pack react@18 react-dom@18 @babel/standalone @tailwindcss/browser exceljs@4.4.0
 ```
-받은 tgz 파일들을 풀어서 각각 `umd/react.development.js`, `umd/react-dom.development.js`, `babel.min.js`, `dist/index.global.js`, `dist/xlsx.core.min.js`를 `vendor/` 안의 같은 이름 파일로 교체하면 됩니다.
+받은 tgz 파일들을 풀어서 각각 `umd/react.development.js`, `umd/react-dom.development.js`, `babel.min.js`, `dist/index.global.js`, `dist/exceljs.min.js`를 `vendor/` 안의 같은 이름 파일로 교체하면 됩니다.
 
 ## 주요 기능
 
@@ -52,7 +52,7 @@ npm pack react@18 react-dom@18 @babel/standalone @tailwindcss/browser xlsx@0.18.
 - **브라우저 저장 없음**: 데이터는 `localStorage` 등에 자동 저장되지 않습니다. 새로고침하거나 다시 열면 항상 빈 매트릭스로 시작하며, JSON 파일을 다시 "불러오기" 해야만 내용이 보입니다. 파일을 불러오지 않은 채로 예전에 남아 있던 브라우저 데이터를 보여주면 그게 최신인지 알 수 없기 때문에, 매번 명시적으로 불러오도록 한 것입니다.
 - **파일 형식에 관대함**: 불러오는 JSON 파일에 일부 필드가 없거나 형식이 바뀌어도 에러 없이 빈 값으로 채워 불러옵니다. 향후 앱에 새 필드가 추가되거나 옛날 파일을 불러오는 경우에도 항상 열리도록 설계했습니다(JSON 구문 자체가 깨진 경우만 오류로 처리).
 - **저장하지 않은 변경사항 경고**: 마지막으로 불러오거나 저장한 내용과 현재 데이터가 다른 상태에서 브라우저 탭/창을 닫거나 다른 페이지로 이동하려고 하면, 브라우저가 "변경사항을 저장하지 않았습니다. 계속하시겠습니까?" 형태의 확인창을 띄웁니다. "취소"를 누르면 페이지에 남아 "저장" 버튼으로 저장할 수 있고, "나가기(떠나기)"를 누르면 저장하지 않고 닫힙니다. 이 확인창의 문구와 버튼 이름은 브라우저가 직접 그리는 것이라 앱에서 "예"/"아니오" 같은 문구로 바꾸거나, "나가기"를 눌렀을 때 자동으로 저장하도록 만들 수는 없습니다(모든 웹사이트에 공통으로 적용되는 브라우저 보안 정책). 데이터를 한 번도 불러오거나 저장한 적 없이 앱을 그냥 열어둔 상태에서는 경고가 뜨지 않습니다.
-- **Excel(.xlsx)로 내보내기**: 우상단 "📊 내보내기" 버튼을 누르면 **현재 화면에 보이는 대로**(과제/담당자/상태 필터가 적용된 상태 그대로) 매트릭스를 Excel 파일로 저장합니다. 첫 행은 과제/담당자 헤더, 각 셀에는 해당 칸의 업무 목록이 `업무명 [시작일 ~ 마감일] (상태)` 형식으로 줄바꿈되어 채워지며, 메모가 있으면 뒤에 덧붙습니다. Chrome/Edge에서는 "저장" 기능과 마찬가지로 파일 이름과 저장 위치를 직접 지정하는 대화상자가 뜨고(마지막 내보내기 폴더를 별도로 기억합니다), 그 외 브라우저에서는 파일 이름만 물어본 뒤 다운로드합니다.
+- **Excel(.xlsx)로 내보내기**: 우상단 "📊 내보내기" 버튼을 누르면 **현재 화면에 보이는 대로**(과제/담당자/상태 필터가 적용된 상태 그대로) 매트릭스를 Excel 파일로 저장합니다. 각 셀에는 그 칸에 있는 업무의 제목만 줄바꿈으로 구분되어 채워지므로, 한 사람이 같은 칸에 여러 업무를 맡고 있어도 전부 표시됩니다. 헤더 행은 굵은 흰 글씨와 남색(담당자 미지정 열은 보라색) 배경으로 강조되고, 과제명 열은 옅은 회색 배경으로 구분되며, 모든 셀에 테두리와 자동 줄바꿈이 적용되고 업무 개수에 맞춰 행 높이가 자동으로 늘어납니다. 첫 행·첫 열은 고정(틀 고정)되어 스크롤해도 항상 보입니다. Chrome/Edge에서는 "저장" 기능과 마찬가지로 파일 이름과 저장 위치를 직접 지정하는 대화상자가 뜨고(마지막 내보내기 폴더를 별도로 기억합니다), 그 외 브라우저에서는 파일 이름만 물어본 뒤 다운로드합니다.
 
 ## 시작 화면
 
@@ -63,12 +63,14 @@ npm pack react@18 react-dom@18 @babel/standalone @tailwindcss/browser xlsx@0.18.
 - [React 18](https://react.dev/) (UMD 빌드, `vendor/`에 로컬 포함)
 - [Babel Standalone](https://babeljs.io/docs/babel-standalone) (브라우저에서 JSX 변환, `vendor/`에 로컬 포함)
 - [Tailwind CSS](https://tailwindcss.com/) (`@tailwindcss/browser` 런타임, `vendor/`에 로컬 포함)
-- [SheetJS `xlsx`](https://sheetjs.com/) (Excel 파일 생성, `vendor/`에 로컬 포함)
+- [ExcelJS](https://github.com/exceljs/exceljs) (서식이 적용된 Excel 파일 생성, `vendor/`에 로컬 포함)
 
 ## 변경 이력
 
 - **v1.3**
   - Excel(.xlsx) 내보내기 기능 추가: 우상단 "📊 내보내기" 버튼으로 현재 화면(선택된 과제/담당자/상태 필터)의 매트릭스를 Excel 파일로 저장합니다. 파일 이름과 저장 위치를 직접 지정할 수 있습니다.
+  - 내보내기 셀에 업무 제목만 줄바꿈으로 나열하도록 수정해, 한 사람이 같은 칸에 여러 업무를 맡은 경우에도 전부 표시되도록 고쳤습니다(행 높이 자동 조정 포함).
+  - 내보낸 Excel 파일에 서식을 적용했습니다: 헤더 강조 색상, 테두리, 자동 줄바꿈, 첫 행/열 틀 고정 등.
 - **v1.2**
   - 업무 메모 기능 추가: 업무 카드마다 최대 200자까지 메모를 남길 수 있습니다.
   - 새 업무 작성 시 날짜 기본값 추가: 시작일은 오늘 날짜, 마감일은 `2050-12-31`로 자동 입력됩니다.
